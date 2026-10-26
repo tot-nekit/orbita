@@ -1,0 +1,47 @@
+name: Core tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: test
+      DATABASE_ENCRYPTION: "0"
+      AUTH_REQUIRED: "0"
+      COOKIE_SECURE: "0"
+      DATABASE_PATH: /tmp/orbita-ci.sqlite3
+      OPENAI_API_KEY: ""
+      STT_API_KEY: ""
+      TELEGRAM_BOT_TOKEN: ""
+      APP_SESSION_SECRET: ci-only-session-secret-never-use-in-production
+    strategy:
+      matrix:
+        python: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install --only-binary=sqlcipher3 -r requirements.txt
+      - run: python test.py
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t orbita-test .
+      - name: Validate production HTTP edge
+        run: docker run --rm --entrypoint caddy orbita-test validate --config /app/Caddyfile --adapter caddyfile
+      - name: Verify encrypted production restart and backup
+        run: docker run --rm -v "$PWD/tests:/app/tests:ro" --entrypoint python orbita-test -m unittest discover -s tests -p test_production.py -v

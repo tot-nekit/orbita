@@ -1,0 +1,4 @@
+# Required for encrypted databases; never substitute stock sqlite3 in production.
+sqlcipher3==0.6.4
+# Windows needs IANA timezone data for zoneinfo:
+tzdata>=2025.1; sys_platform == 'win32'

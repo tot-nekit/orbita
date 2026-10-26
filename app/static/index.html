@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#2463eb" />
+    <title>Орбита — задачи и напоминания</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body class="booting">
+    <section id="access-panel" class="access-panel" aria-live="polite">
+      <img src="/favicon.svg" alt="" width="56" height="56" /><span
+        class="eyebrow"
+        >ОРБИТА</span
+      >
+      <h1 id="access-title">Загружаем записи</h1>
+      <p id="access-text">Подключение к серверу…</p>
+      <a id="access-link" href="/" class="primary" hidden>Перейти на сайт</a>
+    </section>
+    <section id="auth-panel" class="auth-panel" aria-labelledby="auth-title" hidden>
+      <aside class="auth-story">
+        <a class="brand" href="/"><img src="/favicon.svg" width="40" height="40" alt="" /><span>орбита<small>Место для твоих планов</small></span></a>
+        <div class="auth-story-content">
+          <span class="eyebrow">ЧУТЬ БОЛЬШЕ ЯСНОСТИ</span>
+          <h2>Освободи голову.<br />Остальное запишем.</h2>
+          <p>Дела, встречи и напоминания — в одном спокойном пространстве. На большом экране и всегда под рукой.</p>
+          <div class="auth-orbit" aria-hidden="true"><span data-icon="spark"></span><i></i><b></b></div>
+        </div>
+        <p class="auth-story-footer"><span data-icon="lock"></span>Твои планы. Твой ритм.</p>
+      </aside>
+      <div class="auth-main">
+        <button id="auth-theme" class="icon-button auth-theme" aria-label="Переключить тему"><span data-icon="moon"></span></button>
+        <div class="auth-card">
+          <div class="auth-mark" data-icon="lock"></div>
+          <span class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</span>
+          <h1 id="auth-title">С возвращением</h1>
+          <p id="auth-description" class="muted">Войди, чтобы продолжить свои планы.</p>
+          <div id="auth-tabs" class="auth-tabs" role="group" aria-label="Вход или регистрация">
+            <button type="button" data-auth-mode="login" aria-pressed="true">Войти</button>
+            <button type="button" data-auth-mode="register" aria-pressed="false">Создать аккаунт</button>
+          </div>
+          <form id="auth-form">
+            <label for="auth-username">Псевдоним</label>
+            <input id="auth-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" required aria-describedby="auth-username-hint" />
+            <small id="auth-username-hint">3–32 символа: латинские буквы, цифры и _.</small>
+            <div id="auth-recovery-field" hidden>
+              <label for="auth-recovery">Код восстановления</label>
+              <input id="auth-recovery" name="recovery_code" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="256" />
+              <small>Код, который ты сохранил при создании аккаунта или смене пароля.</small>
+            </div>
+            <label id="auth-password-label" for="auth-password">Пароль</label>
+            <div class="password-field"><input id="auth-password" name="password" type="password" autocomplete="current-password" maxlength="128" required /><button id="auth-password-show" type="button" aria-label="Показать пароль" aria-pressed="false">Показать</button></div>
+            <small id="auth-password-hint" hidden>От 12 до 128 символов. Лучше использовать уникальную длинную фразу.</small>
+            <div id="auth-confirm-field" hidden><label for="auth-confirm">Повтори пароль</label><input id="auth-confirm" type="password" autocomplete="new-password" maxlength="128" /></div>
+            <p id="auth-error" class="form-error" role="alert"></p>
+            <button id="auth-submit" class="primary auth-submit">Войти в Орбиту <span aria-hidden="true">↗</span></button>
+          </form>
+          <button id="auth-recover" class="subtle auth-recover" type="button">Не помню пароль</button>
+          <p id="auth-no-email" class="auth-note" hidden>Почта и настоящее имя не нужны. Сохрани псевдоним и код восстановления: без пароля и кода вернуть доступ не получится.</p>
+          <details class="auth-privacy"><summary>Как устроена приватность</summary><p>Для регистрации достаточно псевдонима и пароля. Сессия хранится в HttpOnly cookie. Код восстановления показывается один раз; приложение не сохраняет его в браузере.</p><p>Если на сервере включено шифрование, данные шифруются при хранении. Это не сквозное шифрование: сервер обрабатывает записи и управляет ключом. Текущий статус виден в настройках.</p><p>ИИ для нового аккаунта выключен. При включении запрос и нужный контекст передаются провайдеру модели. Сообщения и уведомления в Telegram находятся вне зашифрованного хранилища приложения.</p></details>
+        </div>
+      </div>
+    </section>
+    <section id="recovery-panel" class="recovery-panel" aria-labelledby="recovery-title" hidden>
+      <div class="recovery-card">
+        <div class="auth-mark" data-icon="lock"></div><span class="eyebrow">ТОЛЬКО ОДИН ПОКАЗ</span>
+        <h1 id="recovery-title">Сохрани код восстановления</h1>
+        <p>Он понадобится, если забудешь пароль. Сохрани его в менеджере паролей или запиши в безопасном месте.</p>
+        <p class="recovery-warning">После закрытия этого экрана код больше не появится. Новый код заменяет предыдущий.</p>
+        <output id="recovery-code" class="recovery-code" aria-label="Код восстановления"></output>
+        <button id="recovery-copy" class="secondary" type="button">Скопировать код</button><p id="recovery-copy-status" class="muted" role="status"></p>
+        <label class="switch-label"><input id="recovery-saved" type="checkbox" />Я сохранил код в безопасном месте</label>
+        <button id="recovery-continue" class="primary auth-submit" disabled>Перейти к планам <span aria-hidden="true">↗</span></button>
+        <p class="auth-note">Не отправляй код в чат и никому его не сообщай. Орбита не сохраняет его на устройстве автоматически.</p>
+      </div>
+    </section>
+    <div class="app">
+      <aside class="sidebar">
+        <a class="brand" href="/"
+          ><img src="/favicon.svg" width="38" height="38" alt="" /><span
+            >орбита<small>Задачи и напоминания</small></span
+          ></a
+        >
+        <div class="workspace">
+          <span class="avatar">Я</span>
+          <div>
+            <strong id="account-name">Мои записи</strong
+            ><small id="account-channel">Общее веб-пространство</small>
+          </div>
+        </div>
+        <nav aria-label="Разделы приложения">
+          <button class="nav active" data-view="assistant">
+            <span data-icon="spark"></span>Ассистент</button
+          ><button class="nav" data-view="planner">
+            <span data-icon="calendar"></span>Мои планы</button
+          ><button class="nav" data-view="archive">
+            <span data-icon="search"></span>Поиск</button
+          ><button class="nav" data-view="settings">
+            <span data-icon="settings"></span>Настройки
+          </button>
+        </nav>
+        <div class="side-note">
+          <span data-icon="spark"></span><strong>Быстрые действия</strong>
+          <p><kbd>N</kbd> — новая запись<br /><kbd>⌘ / Ctrl K</kbd> — поиск</p>
+          <button id="side-create" class="subtle">
+            Добавить запись <span>↗</span>
+          </button>
+        </div>
+        <div class="connection">
+          <i></i><span id="connection">Подключение…</span
+          ><span class="version">3.0.0</span>
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div class="breadcrumb">
+            <span id="channel-label">Орбита</span
+            ><span class="separator">/</span
+            ><strong id="page-label">Ассистент</strong>
+          </div>
+          <div class="top-actions">
+            <span id="date-label"></span
+            ><button
+              id="theme"
+              class="icon-button"
+              aria-label="Переключить тему"
+              title="Переключить тему"
+            >
+              <span data-icon="moon"></span></button
+            ><button id="global-add" class="primary compact">
+              <span data-icon="plus"></span
+              ><span class="add-label">Новая запись</span>
+            </button>
+          </div>
+        </header>
+        <section id="view-assistant" class="view">
+          <div class="heading">
+            <div>
+              <h1 id="assistant-heading">Сегодня</h1>
+              <p>Добавить дело, найти запись или посмотреть планы.</p>
+            </div>
+            <div class="hero-orbit" aria-hidden="true">
+              <span data-icon="spark"></span><i></i>
+            </div>
+          </div>
+          <div class="stats">
+            <button id="open-today">
+              <span class="stat-icon" data-icon="calendar"></span>
+              <div>
+                <strong id="stat-today">—</strong><small>на сегодня</small>
+              </div>
+              <span class="stat-arrow">↗</span></button
+            ><button id="open-meetings">
+              <span class="stat-icon green" data-icon="clock"></span>
+              <div>
+                <strong id="stat-meetings">—</strong><small>встречи</small>
+              </div></button
+            ><button id="open-done">
+              <span class="stat-icon lavender" data-icon="check"></span>
+              <div>
+                <strong id="stat-done">—</strong><small>завершено</small>
+              </div></button
+            ><button id="open-inbox">
+              <span class="stat-icon" data-icon="database"></span>
+              <div>
+                <strong id="stat-inbox">—</strong><small>без даты</small>
+              </div></button
+            ><button id="open-overdue">
+              <span class="stat-icon" data-icon="clock"></span>
+              <div>
+                <strong id="stat-overdue">—</strong><small>просрочено</small>
+              </div>
+            </button>
+          </div>
+          <div class="assistant-grid">
+            <section class="chat-panel" aria-label="Диалог">
+              <div class="panel-head">
+                <div class="assistant-avatar" data-icon="spark"></div>
+                <div>
+                  <strong>Орбита</strong
+                  ><small id="mode-label">Твой помощник в планах</small>
+                </div>
+                <button
+                  id="speak-toggle"
+                  class="icon-button"
+                  aria-label="Включить озвучивание"
+                  aria-pressed="false"
+                  title="Озвучивание"
+                >
+                  <span data-icon="volume"></span>
+                </button>
+              </div>
+              <div
+                id="messages"
+                class="messages"
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions"
+              ></div>
+              <div
+                id="chat-notice"
+                class="chat-notice"
+                role="status"
+                hidden
+              ></div>
+              <div class="composer-wrap">
+                <form id="chat-form">
+                  <label for="prompt" class="sr-only"
+                    >Сообщение ассистенту</label
+                  ><textarea
+                    id="prompt"
+                    rows="1"
+                    maxlength="2000"
+                    placeholder="Что нужно записать?"
+                  ></textarea
+                  ><button
+                    id="mic"
+                    type="button"
+                    class="icon-button"
+                    aria-label="Начать голосовой ввод"
+                    title="Голосовой ввод"
+                  >
+                    <span data-icon="mic"></span></button
+                  ><button
+                    id="send"
+                    class="send"
+                    aria-label="Отправить сообщение"
+                  >
+                    <span data-icon="arrow"></span>
+                  </button>
+                </form>
+                <div class="composer-hint">
+                  <span id="voice-status"
+                    >Enter — отправить · Shift + Enter — перенос</span
+                  ><span class="hint-lock"
+                    ><span data-icon="lock"></span> Общее веб-пространство</span
+                  >
+                </div>
+              </div>
+            </section>
+            <aside class="today-panel">
+              <div class="section-title">
+                <h2>Сегодня</h2>
+                <button
+                  id="today-add"
+                  class="icon-button"
+                  aria-label="Добавить запись"
+                >
+                  <span data-icon="plus"></span>
+                </button>
+              </div>
+              <p id="today-date" class="muted"></p>
+              <div id="today-list"></div>
+              <button id="all-today" class="subtle">
+                Открыть весь день <span>↗</span>
+              </button>
+              <div class="tip">
+                <span data-icon="link"></span><strong>Telegram</strong>
+                <p>
+                  Подключи Telegram в настройках, чтобы работать с теми же
+                  записями с телефона.
+                </p>
+              </div>
+            </aside>
+          </div>
+          <div class="suggestions">
+            <button data-prompt="Что у меня сегодня?">
+              <span data-icon="clock"></span>Мой день</button
+            ><button data-prompt="Помоги создать напоминание">
+              <span data-icon="plus"></span>Новое напоминание</button
+            ><button data-prompt="Помоги найти запись">
+              <span data-icon="search"></span>Найти запись
+            </button>
+          </div>
+          <p class="privacy-note">
+            Текст запроса отправляется ассистенту. Telegram подключается в
+            настройках.
+          </p>
+        </section>
+        <section id="view-planner" class="view" hidden>
+          <div class="page-heading">
+            <div>
+              <h1>Мои планы</h1>
+              <p>Задачи, встречи и напоминания.</p>
+            </div>
+            <button class="primary" id="planner-add">
+              <span data-icon="plus"></span>Добавить запись
+            </button>
+          </div>
+          <div class="filters">
+            <div class="range-tabs" role="group" aria-label="Период">
+              <button class="filter active" data-range="today">Сегодня</button
+              ><button class="filter" data-range="tomorrow">Завтра</button
+              ><button class="filter" data-range="week">Неделя</button
+              ><button class="filter" data-range="overdue">Просрочено</button
+              ><button class="filter" data-range="inbox">Без даты</button
+              ><button class="filter" data-range="all">Все</button
+              ><button class="filter" data-range="custom">Период</button>
+            </div>
+            <div class="filter-selects">
+              <label
+                >Тип<select id="kind-filter">
+                  <option value="">Все типы</option>
+                  <option value="task">Задачи</option>
+                  <option value="meeting">Встречи</option>
+                  <option value="reminder">Напоминания</option>
+                </select></label
+              ><label
+                >Статус<select id="status-filter">
+                  <option value="active">Активные</option>
+                  <option value="done">Выполненные</option>
+                  <option value="">Все</option>
+                </select></label
+              >
+            </div>
+            <div id="custom-range" class="form-row" hidden>
+              <label>С даты<input id="range-start" type="date" /></label
+              ><label>По дату<input id="range-end" type="date" /></label>
+            </div>
+          </div>
+          <div class="list-heading">
+            <p id="planner-count" class="muted"></p>
+            <button class="subtle" id="planner-refresh">
+              <span data-icon="refresh"></span>Обновить
+            </button>
+          </div>
+          <div id="planner-list" class="records-grid"></div>
+          <button id="planner-more" class="secondary load-more" hidden>
+            Показать ещё
+          </button>
+        </section>
+        <section id="view-archive" class="view" hidden>
+          <div class="page-heading">
+            <div>
+              <h1>Найти в планах</h1>
+              <p>По названию или части названия.</p>
+            </div>
+          </div>
+          <form id="search-form" class="searchbar">
+            <span data-icon="search"></span
+            ><label class="sr-only" for="search">Что найти?</label
+            ><input
+              id="search"
+              maxlength="200"
+              placeholder="Презентация, Иван, контракт…"
+            /><button class="primary">Найти</button>
+          </form>
+          <p id="search-count" class="muted">Введите название, имя или тему.</p>
+          <div id="search-list" class="records-grid"></div>
+          <button id="search-more" class="secondary load-more" hidden>
+            Показать ещё
+          </button>
+        </section>
+        <section id="view-settings" class="view" hidden>
+          <div class="page-heading">
+            <div>
+              <h1>Настройки</h1>
+              <p>Твоё пространство, приватность и подключения.</p>
+            </div>
+          </div>
+          <div class="settings-grid">
+            <section id="account-card" class="setting-card" hidden>
+              <div class="setting-icon" data-icon="lock"></div><h2>Твой аккаунт</h2>
+              <p class="account-identity"><strong id="settings-username"></strong><span class="privacy-badge">Личное пространство</span></p>
+              <p>Для входа нужен только псевдоним. Почта и настоящее имя не требуются.</p>
+              <details id="password-details"><summary>Изменить пароль</summary>
+                <form id="password-form" class="account-form">
+                  <label for="current-password">Текущий пароль</label><input id="current-password" type="password" autocomplete="current-password" maxlength="128" required />
+                  <label for="new-password">Новый пароль</label><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
+                  <small>От 12 до 128 символов.</small><label for="new-password-confirm">Повтори новый пароль</label><input id="new-password-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
+                  <p>Другие сессии будут завершены. Сохрани новый код восстановления — старый перестанет работать.</p>
+                  <p id="password-error" class="form-error" role="alert"></p><button class="primary" id="password-submit">Сохранить пароль</button>
+                </form>
+              </details>
+              <details id="delete-details" class="delete-details"><summary>Удалить аккаунт</summary>
+                <form id="delete-account-form" class="account-form"><p>Аккаунт и его данные будут удалены без возможности восстановления. Сначала можно скачать экспорт в разделе «Данные».</p><label for="delete-password">Пароль аккаунта</label><input id="delete-password" type="password" autocomplete="current-password" maxlength="128" required /><label class="switch-label"><input id="delete-confirmed" type="checkbox" required />Понимаю, что аккаунт и данные будут удалены навсегда</label><p id="delete-error" class="form-error" role="alert"></p><button id="delete-account-submit" class="primary danger">Удалить аккаунт и данные</button></form>
+              </details>
+            </section>
+            <section class="setting-card privacy-card">
+              <div class="setting-icon" data-icon="lock"></div><h2>Приватность</h2>
+              <p id="encryption-state">Проверяем защиту хранилища…</p>
+              <p>Шифрование при хранении не является сквозным: сервер обрабатывает записи и управляет ключом.</p>
+              <p>При включённом ИИ запрос и нужный контекст диалога передаются провайдеру модели. Сообщения и уведомления в Telegram находятся вне зашифрованного хранилища приложения.</p>
+            </section>
+            <section class="setting-card telegram-card">
+              <div class="setting-icon" data-icon="telegram"></div>
+              <h2>Сайт + Telegram</h2>
+              <p id="telegram-state">Проверяем подключение…</p>
+              <a
+                id="open-bot"
+                class="primary"
+                hidden
+                target="_blank"
+                rel="noopener"
+                >Открыть бота ↗</a
+              >
+              <form id="link-form">
+                <label for="link-code">Код из команды /link в боте</label>
+                <div class="inline-form">
+                  <input
+                    id="link-code"
+                    maxlength="10"
+                    autocomplete="off"
+                    placeholder="Например, 7A3F08B2C1"
+                    required
+                  /><button class="primary">Связать</button>
+                </div>
+                <small id="link-description"
+                  >Сайт переключится на записи Telegram-аккаунта. Текущие записи
+                  не удаляются и не объединяются автоматически.</small
+                >
+              </form>
+              <p id="link-error" class="form-error" role="alert"></p>
+              <label class="switch-label"
+                ><input id="notify-toggle" type="checkbox" />Напоминания в
+                Telegram</label
+              >
+              <p id="notify-state" class="muted"></p>
+            </section>
+            <section class="setting-card">
+              <div class="setting-icon" data-icon="clock"></div>
+              <h2>Время и интерфейс</h2>
+              <label for="timezone">Часовой пояс</label
+              ><select id="timezone">
+                <option value="Europe/Moscow">Москва · UTC+3</option>
+                <option value="Europe/Kaliningrad">Калининград · UTC+2</option>
+                <option value="Asia/Yekaterinburg">Екатеринбург · UTC+5</option>
+                <option value="Asia/Novosibirsk">Новосибирск · UTC+7</option>
+                <option value="Asia/Vladivostok">Владивосток · UTC+10</option>
+                <option value="Europe/London">Лондон · Europe/London</option>
+                <option value="UTC">UTC</option>
+              </select>
+              <p>
+                Пояс синхронизируется с ботом. Старые записи сохраняют исходный
+                пояс.
+              </p>
+              <button id="settings-theme" class="secondary">
+                <span data-icon="moon"></span>Переключить тему
+              </button>
+              <p>
+                Ctrl / Cmd + K — поиск · N — новая запись · Esc — закрыть окно.
+              </p>
+            </section>
+            <section class="setting-card">
+              <div class="setting-icon" data-icon="spark"></div>
+              <h2>Ассистент и голос</h2>
+              <label id="use-ai-label" class="switch-label" hidden><input id="use-ai" type="checkbox" />Использовать ИИ для моих запросов</label>
+              <p id="use-ai-state" hidden></p>
+              <p id="ai-details"></p>
+              <p>
+                Без ключа работает ограниченный локальный разбор. С LLM можно
+                формулировать свободнее. API-ключ остаётся на сервере.
+              </p>
+              <p id="voice-details">
+                Микрофон требует HTTPS или localhost. В боте можно отправить
+                обычное голосовое; перед выполнением запроса ты проверишь
+                расшифровку.
+              </p>
+              <button id="new-chat" class="secondary">Новый диалог</button>
+            </section>
+            <section class="setting-card">
+              <div class="setting-icon" data-icon="database"></div>
+              <h2>Данные</h2>
+              <details id="demo-data">
+                <summary>Учебный пример: 1000 записей</summary>
+                <p>
+                  Добавит 1000 учебных записей в текущий аккаунт. Это не твои
+                  личные планы. Исходные даты сохраняются; старые задачи попадут
+                  в «Просрочено». Повторный импорт не создаёт дубликатов.
+                </p>
+                <button class="secondary" id="import-data">
+                  Загрузить пример
+                </button>
+                <p id="import-result" role="status"></p>
+              </details>
+              <div class="export-links">
+                <button class="secondary" id="export-json">Скачать JSON</button
+                ><button class="secondary" id="export-csv">Скачать CSV</button>
+              </div>
+              <p>
+                Удаление можно отменить в течение 10 минут. В экспорте нет
+                удалённых записей.
+              </p>
+              <button class="subtle" id="open-trash">Недавно удалённые</button>
+              <div id="trash-list" hidden></div>
+              <button class="subtle danger" id="logout" hidden>
+                Отвязать Telegram от сайта
+              </button>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+    <dialog id="event-dialog">
+      <form id="event-form">
+        <div class="dialog-header">
+          <div><h2 id="dialog-title">Новая запись</h2></div>
+          <button
+            type="button"
+            id="dialog-close"
+            class="icon-button"
+            aria-label="Закрыть"
+          >
+            <span data-icon="close"></span>
+          </button>
+        </div>
+        <label
+          >Название<input
+            id="event-title"
+            required
+            maxlength="500"
+            placeholder="Что запланируем?"
+            autocomplete="off" /></label
+        ><label
+          >Тип записи<select id="event-kind">
+            <option value="task">Задача</option>
+            <option value="meeting">Встреча</option>
+            <option value="reminder">Напоминание</option>
+          </select></label
+        >
+        <div class="form-row">
+          <label>Дата<input id="event-date" type="date" /></label
+          ><label>Время<input id="event-time" type="time" /></label>
+        </div>
+        <div class="form-row">
+          <label id="duration-label"
+            >Длительность, мин<input
+              id="event-duration"
+              type="number"
+              min="5"
+              max="1440"
+              value="60"
+              required /></label
+          ><label
+            >Статус<select id="event-status">
+              <option value="active">Активно</option>
+              <option value="done">Выполнено</option>
+            </select></label
+          >
+        </div>
+        <p id="event-zone" class="muted"></p>
+        <p id="form-error" class="form-error" role="alert"></p>
+        <div class="dialog-footer">
+          <button type="button" id="dialog-cancel" class="secondary">
+            Отмена</button
+          ><button id="event-save" class="primary">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <div class="confirm-icon" data-icon="question"></div>
+      <h2 id="confirm-title">Подтверди действие</h2>
+      <p id="confirm-text"></p>
+      <div class="dialog-footer">
+        <button id="confirm-no" class="secondary">Отмена</button
+        ><button id="confirm-yes" class="primary">Подтвердить</button>
+      </div>
+    </dialog>
+    <div id="toast" role="status" hidden>
+      <span id="toast-text"></span><button id="toast-action" hidden></button
+      ><button id="toast-close" aria-label="Закрыть уведомление">
+        <span data-icon="close"></span>
+      </button>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,38 @@
+{
+	admin off
+	auto_https off
+	grace_period 8s
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers X-Forwarded-For
+		max_header_size 32KB
+		timeouts {
+			read_header 10s
+			read_body 30s
+			write 90s
+			idle 30s
+		}
+	}
+}
+
+# TLS terminates at Render (or your own HTTPS ingress). Preserve the request
+# Host for the application's PUBLIC_BASE_URL check. No request access log.
+http://:{$PORT:8000} {
+	request_body {
+		max_size 16MB
+	}
+	reverse_proxy 127.0.0.1:{$APP_PORT:8001} {
+		header_up X-Orbita-Client-IP {client_ip}
+		header_up X-Forwarded-Proto {$FORWARDED_SCHEME:http}
+		header_up -X-Forwarded-For
+		header_up -X-Forwarded-Host
+		transport http {
+			dial_timeout 3s
+			response_header_timeout 75s
+			read_timeout 75s
+			write_timeout 30s
+			max_conns_per_host 16
+			keepalive off
+		}
+	}
+}

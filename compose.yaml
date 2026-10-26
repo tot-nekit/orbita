@@ -1,0 +1,43 @@
+services:
+  orbita:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      APP_ENV: production
+      HOST: 127.0.0.1
+      PORT: 8000
+      APP_PORT: 8001
+      CADDY_ENABLED: "1"
+      AUTH_REQUIRED: "1"
+      DATABASE_PATH: /app/data/orbita.sqlite3
+      DATABASE_ENCRYPTION: "1"
+      DATABASE_KEY: ${DATABASE_KEY:?Set a permanent base64url encoded 32-byte key}
+      APP_SESSION_SECRET: ${APP_SESSION_SECRET:?Set a random 32+ character secret in .env}
+      COOKIE_SECURE: "1"
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-1}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-6}
+      BACKUP_KEEP: ${BACKUP_KEEP:-28}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://vyceai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-claude-sonnet-4-6}
+      LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-deepseek-v4-flash}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-16}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-1200}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
+      STT_ENABLED: ${STT_ENABLED:-0}
+      STT_BASE_URL: ${STT_BASE_URL:-https://api.openai.com/v1}
+      STT_API_KEY: ${STT_API_KEY:-}
+      STT_MODEL: ${STT_MODEL:-gpt-4o-mini-transcribe}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
+      TELEGRAM_ALLOW_PUBLIC: ${TELEGRAM_ALLOW_PUBLIC:-0}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Set the public HTTPS origin}
+    volumes:
+      - orbita-data:/app/data
+    restart: unless-stopped
+    stop_grace_period: 20s
+    pids_limit: 128
+volumes:
+  orbita-data:
