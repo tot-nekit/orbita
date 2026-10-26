@@ -204,7 +204,8 @@ def history(sid):
 
 def account(values=None):
     with connect() as db:
-        db.execute('INSERT OR IGNORE INTO accounts(owner) VALUES(?)',(owner(),))
+        public=os.getenv('AUTH_REQUIRED','1' if os.getenv('APP_ENV')=='production' else '0')=='1'
+        db.execute('INSERT OR IGNORE INTO accounts(owner,use_ai) VALUES(?,?)',(owner(),0 if public else 1))
         if values:
             for k in ('chat_id','timezone','notify','use_ai'):
                 if k in values:db.execute(f'UPDATE accounts SET {k}=? WHERE owner=?',(values[k],owner()))

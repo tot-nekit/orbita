@@ -86,7 +86,7 @@ def main():
     adopt.add_argument('--confirm', action='store_true', required=True)
     args = parser.parse_args()
     if args.command == 'keygen':
-        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as f:
             f.write(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode() + '\n')

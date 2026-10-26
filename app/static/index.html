@@ -24,61 +24,199 @@
       <p id="access-text">Подключение к серверу…</p>
       <a id="access-link" href="/" class="primary" hidden>Перейти на сайт</a>
     </section>
-    <section id="auth-panel" class="auth-panel" aria-labelledby="auth-title" hidden>
+    <section
+      id="auth-panel"
+      class="auth-panel"
+      aria-labelledby="auth-title"
+      hidden
+    >
       <aside class="auth-story">
-        <a class="brand" href="/"><img src="/favicon.svg" width="40" height="40" alt="" /><span>орбита<small>Место для твоих планов</small></span></a>
+        <a class="brand" href="/"
+          ><img src="/favicon.svg" width="40" height="40" alt="" /><span
+            >орбита<small>Место для твоих планов</small></span
+          ></a
+        >
         <div class="auth-story-content">
           <span class="eyebrow">ЧУТЬ БОЛЬШЕ ЯСНОСТИ</span>
           <h2>Освободи голову.<br />Остальное запишем.</h2>
-          <p>Дела, встречи и напоминания — в одном спокойном пространстве. На большом экране и всегда под рукой.</p>
-          <div class="auth-orbit" aria-hidden="true"><span data-icon="spark"></span><i></i><b></b></div>
+          <p>
+            Дела, встречи и напоминания — в одном спокойном пространстве. На
+            большом экране и всегда под рукой.
+          </p>
+          <div class="auth-orbit" aria-hidden="true">
+            <span data-icon="spark"></span><i></i><b></b>
+          </div>
         </div>
-        <p class="auth-story-footer"><span data-icon="lock"></span>Твои планы. Твой ритм.</p>
+        <p class="auth-story-footer">
+          <span data-icon="lock"></span>Твои планы. Твой ритм.
+        </p>
       </aside>
       <div class="auth-main">
-        <button id="auth-theme" class="icon-button auth-theme" aria-label="Переключить тему"><span data-icon="moon"></span></button>
+        <button
+          id="auth-theme"
+          class="icon-button auth-theme"
+          aria-label="Переключить тему"
+        >
+          <span data-icon="moon"></span>
+        </button>
         <div class="auth-card">
           <div class="auth-mark" data-icon="lock"></div>
           <span class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</span>
           <h1 id="auth-title">С возвращением</h1>
-          <p id="auth-description" class="muted">Войди, чтобы продолжить свои планы.</p>
-          <div id="auth-tabs" class="auth-tabs" role="group" aria-label="Вход или регистрация">
-            <button type="button" data-auth-mode="login" aria-pressed="true">Войти</button>
-            <button type="button" data-auth-mode="register" aria-pressed="false">Создать аккаунт</button>
+          <p id="auth-description" class="muted">
+            Войди, чтобы продолжить свои планы.
+          </p>
+          <div
+            id="auth-tabs"
+            class="auth-tabs"
+            role="group"
+            aria-label="Вход или регистрация"
+          >
+            <button type="button" data-auth-mode="login" aria-pressed="true">
+              Войти
+            </button>
+            <button
+              type="button"
+              data-auth-mode="register"
+              aria-pressed="false"
+            >
+              Создать аккаунт
+            </button>
           </div>
           <form id="auth-form">
             <label for="auth-username">Псевдоним</label>
-            <input id="auth-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" required aria-describedby="auth-username-hint" />
-            <small id="auth-username-hint">3–32 символа: латинские буквы, цифры и _.</small>
+            <input
+              id="auth-username"
+              name="username"
+              autocomplete="username"
+              autocapitalize="none"
+              spellcheck="false"
+              pattern="[A-Za-z0-9_]{3,32}"
+              minlength="3"
+              maxlength="32"
+              required
+              aria-describedby="auth-username-hint"
+            />
+            <small id="auth-username-hint"
+              >3–32 символа: латинские буквы, цифры и _.</small
+            >
             <div id="auth-recovery-field" hidden>
               <label for="auth-recovery">Код восстановления</label>
-              <input id="auth-recovery" name="recovery_code" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="256" />
-              <small>Код, который ты сохранил при создании аккаунта или смене пароля.</small>
+              <input
+                id="auth-recovery"
+                name="recovery_code"
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
+                maxlength="256"
+              />
+              <small
+                >Код, который ты сохранил при создании аккаунта или смене
+                пароля.</small
+              >
             </div>
             <label id="auth-password-label" for="auth-password">Пароль</label>
-            <div class="password-field"><input id="auth-password" name="password" type="password" autocomplete="current-password" maxlength="128" required /><button id="auth-password-show" type="button" aria-label="Показать пароль" aria-pressed="false">Показать</button></div>
-            <small id="auth-password-hint" hidden>От 12 до 128 символов. Лучше использовать уникальную длинную фразу.</small>
-            <div id="auth-confirm-field" hidden><label for="auth-confirm">Повтори пароль</label><input id="auth-confirm" type="password" autocomplete="new-password" maxlength="128" /></div>
+            <div class="password-field">
+              <input
+                id="auth-password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                maxlength="128"
+                required
+              /><button
+                id="auth-password-show"
+                type="button"
+                aria-label="Показать пароль"
+                aria-pressed="false"
+              >
+                Показать
+              </button>
+            </div>
+            <small id="auth-password-hint" hidden
+              >От 12 до 128 символов. Лучше использовать уникальную длинную
+              фразу.</small
+            >
+            <div id="auth-confirm-field" hidden>
+              <label for="auth-confirm">Повтори пароль</label
+              ><input
+                id="auth-confirm"
+                type="password"
+                autocomplete="new-password"
+                maxlength="128"
+              />
+            </div>
             <p id="auth-error" class="form-error" role="alert"></p>
-            <button id="auth-submit" class="primary auth-submit">Войти в Орбиту <span aria-hidden="true">↗</span></button>
+            <button id="auth-submit" class="primary auth-submit">
+              Войти в Орбиту <span aria-hidden="true">↗</span>
+            </button>
           </form>
-          <button id="auth-recover" class="subtle auth-recover" type="button">Не помню пароль</button>
-          <p id="auth-no-email" class="auth-note" hidden>Почта и настоящее имя не нужны. Сохрани псевдоним и код восстановления: без пароля и кода вернуть доступ не получится.</p>
-          <details class="auth-privacy"><summary>Как устроена приватность</summary><p>Для регистрации достаточно псевдонима и пароля. Сессия хранится в HttpOnly cookie. Код восстановления показывается один раз; приложение не сохраняет его в браузере.</p><p>Если на сервере включено шифрование, данные шифруются при хранении. Это не сквозное шифрование: сервер обрабатывает записи и управляет ключом. Текущий статус виден в настройках.</p><p>ИИ для нового аккаунта выключен. При включении запрос и нужный контекст передаются провайдеру модели. Сообщения и уведомления в Telegram находятся вне зашифрованного хранилища приложения.</p></details>
+          <button id="auth-recover" class="subtle auth-recover" type="button">
+            Не помню пароль
+          </button>
+          <p id="auth-no-email" class="auth-note" hidden>
+            Почта и настоящее имя не нужны. Сохрани псевдоним и код
+            восстановления: без пароля и кода вернуть доступ не получится.
+          </p>
+          <details class="auth-privacy">
+            <summary>Как устроена приватность</summary>
+            <p>
+              Для регистрации достаточно псевдонима и пароля. Сессия хранится в
+              HttpOnly cookie. Код восстановления показывается один раз;
+              приложение не сохраняет его в браузере.
+            </p>
+            <p>
+              Если на сервере включено шифрование, данные шифруются при
+              хранении. Это не сквозное шифрование: сервер обрабатывает записи и
+              управляет ключом. Текущий статус виден в настройках.
+            </p>
+            <p>
+              ИИ для нового аккаунта выключен. При включении запрос и нужный
+              контекст передаются провайдеру модели. Сообщения и уведомления в
+              Telegram находятся вне зашифрованного хранилища приложения.
+            </p>
+          </details>
         </div>
       </div>
     </section>
-    <section id="recovery-panel" class="recovery-panel" aria-labelledby="recovery-title" hidden>
+    <section
+      id="recovery-panel"
+      class="recovery-panel"
+      aria-labelledby="recovery-title"
+      hidden
+    >
       <div class="recovery-card">
-        <div class="auth-mark" data-icon="lock"></div><span class="eyebrow">ТОЛЬКО ОДИН ПОКАЗ</span>
+        <div class="auth-mark" data-icon="lock"></div>
+        <span class="eyebrow">ТОЛЬКО ОДИН ПОКАЗ</span>
         <h1 id="recovery-title">Сохрани код восстановления</h1>
-        <p>Он понадобится, если забудешь пароль. Сохрани его в менеджере паролей или запиши в безопасном месте.</p>
-        <p class="recovery-warning">После закрытия этого экрана код больше не появится. Новый код заменяет предыдущий.</p>
-        <output id="recovery-code" class="recovery-code" aria-label="Код восстановления"></output>
-        <button id="recovery-copy" class="secondary" type="button">Скопировать код</button><p id="recovery-copy-status" class="muted" role="status"></p>
-        <label class="switch-label"><input id="recovery-saved" type="checkbox" />Я сохранил код в безопасном месте</label>
-        <button id="recovery-continue" class="primary auth-submit" disabled>Перейти к планам <span aria-hidden="true">↗</span></button>
-        <p class="auth-note">Не отправляй код в чат и никому его не сообщай. Орбита не сохраняет его на устройстве автоматически.</p>
+        <p>
+          Он понадобится, если забудешь пароль. Сохрани его в менеджере паролей
+          или запиши в безопасном месте.
+        </p>
+        <p class="recovery-warning">
+          После закрытия этого экрана код больше не появится. Новый код заменяет
+          предыдущий.
+        </p>
+        <output
+          id="recovery-code"
+          class="recovery-code"
+          aria-label="Код восстановления"
+        ></output>
+        <button id="recovery-copy" class="secondary" type="button">
+          Скопировать код
+        </button>
+        <p id="recovery-copy-status" class="muted" role="status"></p>
+        <label class="switch-label"
+          ><input id="recovery-saved" type="checkbox" />Я сохранил код в
+          безопасном месте</label
+        >
+        <button id="recovery-continue" class="primary auth-submit" disabled>
+          Перейти к планам <span aria-hidden="true">↗</span>
+        </button>
+        <p class="auth-note">
+          Не отправляй код в чат и никому его не сообщай. Орбита не сохраняет
+          его на устройстве автоматически.
+        </p>
       </div>
     </section>
     <div class="app">
@@ -367,27 +505,99 @@
           </div>
           <div class="settings-grid">
             <section id="account-card" class="setting-card" hidden>
-              <div class="setting-icon" data-icon="lock"></div><h2>Твой аккаунт</h2>
-              <p class="account-identity"><strong id="settings-username"></strong><span class="privacy-badge">Личное пространство</span></p>
-              <p>Для входа нужен только псевдоним. Почта и настоящее имя не требуются.</p>
-              <details id="password-details"><summary>Изменить пароль</summary>
+              <div class="setting-icon" data-icon="lock"></div>
+              <h2>Твой аккаунт</h2>
+              <p class="account-identity">
+                <strong id="settings-username"></strong
+                ><span class="privacy-badge">Личное пространство</span>
+              </p>
+              <p>
+                Для входа нужен только псевдоним. Почта и настоящее имя не
+                требуются.
+              </p>
+              <details id="password-details">
+                <summary>Изменить пароль</summary>
                 <form id="password-form" class="account-form">
-                  <label for="current-password">Текущий пароль</label><input id="current-password" type="password" autocomplete="current-password" maxlength="128" required />
-                  <label for="new-password">Новый пароль</label><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
-                  <small>От 12 до 128 символов.</small><label for="new-password-confirm">Повтори новый пароль</label><input id="new-password-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
-                  <p>Другие сессии будут завершены. Сохрани новый код восстановления — старый перестанет работать.</p>
-                  <p id="password-error" class="form-error" role="alert"></p><button class="primary" id="password-submit">Сохранить пароль</button>
+                  <label for="current-password">Текущий пароль</label
+                  ><input
+                    id="current-password"
+                    type="password"
+                    autocomplete="current-password"
+                    maxlength="128"
+                    required
+                  />
+                  <label for="new-password">Новый пароль</label
+                  ><input
+                    id="new-password"
+                    type="password"
+                    autocomplete="new-password"
+                    minlength="12"
+                    maxlength="128"
+                    required
+                  />
+                  <small>От 12 до 128 символов.</small
+                  ><label for="new-password-confirm">Повтори новый пароль</label
+                  ><input
+                    id="new-password-confirm"
+                    type="password"
+                    autocomplete="new-password"
+                    minlength="12"
+                    maxlength="128"
+                    required
+                  />
+                  <p>
+                    Другие сессии будут завершены. Сохрани новый код
+                    восстановления — старый перестанет работать.
+                  </p>
+                  <p id="password-error" class="form-error" role="alert"></p>
+                  <button class="primary" id="password-submit">
+                    Сохранить пароль
+                  </button>
                 </form>
               </details>
-              <details id="delete-details" class="delete-details"><summary>Удалить аккаунт</summary>
-                <form id="delete-account-form" class="account-form"><p>Аккаунт и его данные будут удалены без возможности восстановления. Сначала можно скачать экспорт в разделе «Данные».</p><label for="delete-password">Пароль аккаунта</label><input id="delete-password" type="password" autocomplete="current-password" maxlength="128" required /><label class="switch-label"><input id="delete-confirmed" type="checkbox" required />Понимаю, что аккаунт и данные будут удалены навсегда</label><p id="delete-error" class="form-error" role="alert"></p><button id="delete-account-submit" class="primary danger">Удалить аккаунт и данные</button></form>
+              <details id="delete-details" class="delete-details">
+                <summary>Удалить аккаунт</summary>
+                <form id="delete-account-form" class="account-form">
+                  <p>
+                    Аккаунт и его данные будут удалены без возможности
+                    восстановления. Сначала можно скачать экспорт в разделе
+                    «Данные».
+                  </p>
+                  <label for="delete-password">Пароль аккаунта</label
+                  ><input
+                    id="delete-password"
+                    type="password"
+                    autocomplete="current-password"
+                    maxlength="128"
+                    required
+                  /><label class="switch-label"
+                    ><input
+                      id="delete-confirmed"
+                      type="checkbox"
+                      required
+                    />Понимаю, что аккаунт и данные будут удалены
+                    навсегда</label
+                  >
+                  <p id="delete-error" class="form-error" role="alert"></p>
+                  <button id="delete-account-submit" class="primary danger">
+                    Удалить аккаунт и данные
+                  </button>
+                </form>
               </details>
             </section>
             <section class="setting-card privacy-card">
-              <div class="setting-icon" data-icon="lock"></div><h2>Приватность</h2>
+              <div class="setting-icon" data-icon="lock"></div>
+              <h2>Приватность</h2>
               <p id="encryption-state">Проверяем защиту хранилища…</p>
-              <p>Шифрование при хранении не является сквозным: сервер обрабатывает записи и управляет ключом.</p>
-              <p>При включённом ИИ запрос и нужный контекст диалога передаются провайдеру модели. Сообщения и уведомления в Telegram находятся вне зашифрованного хранилища приложения.</p>
+              <p>
+                Шифрование при хранении не является сквозным: сервер
+                обрабатывает записи и управляет ключом.
+              </p>
+              <p>
+                При включённом ИИ запрос и нужный контекст диалога передаются
+                провайдеру модели. Сообщения и уведомления в Telegram находятся
+                вне зашифрованного хранилища приложения.
+              </p>
             </section>
             <section class="setting-card telegram-card">
               <div class="setting-icon" data-icon="telegram"></div>
@@ -451,7 +661,10 @@
             <section class="setting-card">
               <div class="setting-icon" data-icon="spark"></div>
               <h2>Ассистент и голос</h2>
-              <label id="use-ai-label" class="switch-label" hidden><input id="use-ai" type="checkbox" />Использовать ИИ для моих запросов</label>
+              <label id="use-ai-label" class="switch-label" hidden
+                ><input id="use-ai" type="checkbox" />Использовать ИИ для моих
+                запросов</label
+              >
               <p id="use-ai-state" hidden></p>
               <p id="ai-details"></p>
               <p>

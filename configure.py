@@ -30,9 +30,13 @@ def main():
             with os.fdopen(fd,'w') as f:f.write(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()+'\n')
         except FileExistsError:pass
     db=Path(os.getenv('DATABASE_PATH',str(ROOT/'data/orbita.sqlite3')))
-    if db.exists() and db.stat().st_size and db.open('rb').read(16)==b'SQLite format 3\0':
+    header=b''
+    if db.exists():
+        with db.open('rb') as file:header=file.read(16)
+    if header==b'SQLite format 3\0':
         raise SystemExit('Найдена прежняя база без шифрования. Сначала выполни перенос по docs/PRIVACY.md. База и .env не изменены.')
     values={'HOST':'127.0.0.1','PORT':'8000','APP_ENV':'local','AUTH_REQUIRED':'1','DATABASE_ENCRYPTION':'1','DATABASE_KEY':database_key,'DATABASE_KEY_FILE':key_path,'APP_SESSION_SECRET':os.getenv('APP_SESSION_SECRET') or secrets.token_urlsafe(48),'COOKIE_SECURE':'0','OPENAI_API_KEY':key,'OPENAI_BASE_URL':'https://vyceai.com/v1','OPENAI_MODEL':'claude-sonnet-4-6','LLM_FALLBACK_MODEL':'deepseek-v4-flash','LLM_TIMEOUT':'16','LLM_MAX_TOKENS':'1200','LLM_TEMPERATURE':'0.1','STT_ENABLED':'0','STT_MODEL':'gpt-4o-mini-transcribe','TELEGRAM_BOT_TOKEN':bot,'TELEGRAM_BOT_USERNAME':username,'TELEGRAM_ALLOWED_USER_IDS':ids,'TELEGRAM_ALLOW_PUBLIC':'0','PUBLIC_BASE_URL':url}
+    values['DATABASE_PATH']=str(db.resolve())
     if any('\n' in v or '\r' in v for v in values.values()):raise SystemExit('Переносы строк в настройках запрещены.')
     path.write_text('\n'.join(k+'='+json.dumps(v,ensure_ascii=False) for k,v in values.items())+'\n');os.chmod(path,0o600)
     print('Готово. Запуск: python run.py all. Открой http://localhost:8000.')

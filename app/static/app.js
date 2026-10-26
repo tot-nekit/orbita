@@ -103,8 +103,10 @@ let authRequired = false,
   identityVersion = 0,
   privateReady = false;
 const requests = new Set();
-const identityChannel = typeof BroadcastChannel === "function"
-  ? new BroadcastChannel("orbita.identity") : null;
+const identityChannel =
+  typeof BroadcastChannel === "function"
+    ? new BroadcastChannel("orbita.identity")
+    : null;
 function staleResponse() {
   return Object.assign(new Error("Пространство изменилось."), { stale: true });
 }
@@ -139,10 +141,34 @@ function clearPrivate() {
   historyLoading = refreshLoading = null;
   session = crypto.randomUUID();
   prefs.set("session", session);
-  for (const id of ["messages", "planner-list", "search-list", "trash-list", "today-list", "toast-text", "chat-notice", "planner-count", "search-count", "import-result", "link-error", "form-error", "settings-username", "recovery-code", "password-error", "delete-error"])
+  for (const id of [
+    "messages",
+    "planner-list",
+    "search-list",
+    "trash-list",
+    "today-list",
+    "toast-text",
+    "chat-notice",
+    "planner-count",
+    "search-count",
+    "import-result",
+    "link-error",
+    "form-error",
+    "settings-username",
+    "recovery-code",
+    "password-error",
+    "delete-error",
+  ])
     $(id)?.replaceChildren();
   document.querySelectorAll("dialog[open]").forEach((el) => el.close());
-  for (const id of ["event-form", "search-form", "chat-form", "password-form", "delete-account-form", "link-form"])
+  for (const id of [
+    "event-form",
+    "search-form",
+    "chat-form",
+    "password-form",
+    "delete-account-form",
+    "link-form",
+  ])
     $(id).reset();
   $("auth-form").reset();
   $("trash-list").hidden = $("toast").hidden = $("chat-notice").hidden = true;
@@ -153,13 +179,22 @@ function clearPrivate() {
   $("use-ai").checked = $("notify-toggle").checked = false;
   $("encryption-state").textContent = "";
   $("ai-details").textContent = $("voice-details").textContent = "";
-  $("use-ai-state").textContent = $("telegram-state").textContent = $("notify-state").textContent = "";
+  $("use-ai-state").textContent =
+    $("telegram-state").textContent =
+    $("notify-state").textContent =
+      "";
   $("voice-status").textContent = "Enter — отправить · Shift + Enter — перенос";
   $("prompt").style.height = "auto";
   $("account-name").textContent = "Мои записи";
   $("account-channel").textContent = "";
   $("connection").textContent = "Вход не выполнен";
-  for (const id of ["stat-today", "stat-meetings", "stat-done", "stat-inbox", "stat-overdue"])
+  for (const id of [
+    "stat-today",
+    "stat-meetings",
+    "stat-done",
+    "stat-inbox",
+    "stat-overdue",
+  ])
     $(id).textContent = "—";
   $("recovery-panel").hidden = true;
   $("recovery-saved").checked = false;
@@ -176,8 +211,12 @@ function clearPrivate() {
   $("status-filter").disabled = false;
   $("range-start").value = $("range-end").value = "";
   $("custom-range").hidden = true;
-  document.querySelectorAll("[data-range]").forEach((el) => el.classList.toggle("active", el.dataset.range === range));
-  document.querySelectorAll(".view").forEach((el) => el.hidden = el.id !== "view-assistant");
+  document
+    .querySelectorAll("[data-range]")
+    .forEach((el) => el.classList.toggle("active", el.dataset.range === range));
+  document
+    .querySelectorAll(".view")
+    .forEach((el) => (el.hidden = el.id !== "view-assistant"));
   document.querySelectorAll(".nav").forEach((el) => {
     el.classList.toggle("active", el.dataset.view === view);
     if (el.dataset.view === view) el.setAttribute("aria-current", "page");
@@ -205,15 +244,34 @@ function setAuthMode(mode) {
   $("auth-confirm-field").hidden = mode === "login";
   $("auth-confirm").required = mode !== "login";
   $("auth-password").minLength = mode === "login" ? 1 : 12;
-  $("auth-password").autocomplete = mode === "login" ? "current-password" : "new-password";
+  $("auth-password").autocomplete =
+    mode === "login" ? "current-password" : "new-password";
   $("auth-password-hint").hidden = mode === "login";
   $("auth-no-email").hidden = mode === "login";
-  $("auth-title").textContent = { login: "С возвращением", register: "Твои планы начинаются здесь", recover: "Вернём доступ" }[mode];
-  $("auth-description").textContent = { login: "Войди, чтобы продолжить свои планы.", register: "Придумай псевдоним. Почта не понадобится.", recover: "Введи сохранённый код и придумай новый пароль." }[mode];
-  $("auth-password-label").textContent = mode === "recover" ? "Новый пароль" : "Пароль";
-  $("auth-submit").textContent = { login: "Войти в Орбиту ↗", register: "Создать личное пространство ↗", recover: "Восстановить доступ ↗" }[mode];
-  $("auth-recover").textContent = mode === "recover" ? "Вернуться ко входу" : "Не помню пароль";
-  document.querySelectorAll("[data-auth-mode]").forEach((el) => el.setAttribute("aria-pressed", String(el.dataset.authMode === mode)));
+  $("auth-title").textContent = {
+    login: "С возвращением",
+    register: "Твои планы начинаются здесь",
+    recover: "Вернём доступ",
+  }[mode];
+  $("auth-description").textContent = {
+    login: "Войди, чтобы продолжить свои планы.",
+    register: "Придумай псевдоним. Почта не понадобится.",
+    recover: "Введи сохранённый код и придумай новый пароль.",
+  }[mode];
+  $("auth-password-label").textContent =
+    mode === "recover" ? "Новый пароль" : "Пароль";
+  $("auth-submit").textContent = {
+    login: "Войти в Орбиту ↗",
+    register: "Создать личное пространство ↗",
+    recover: "Восстановить доступ ↗",
+  }[mode];
+  $("auth-recover").textContent =
+    mode === "recover" ? "Вернуться ко входу" : "Не помню пароль";
+  document
+    .querySelectorAll("[data-auth-mode]")
+    .forEach((el) =>
+      el.setAttribute("aria-pressed", String(el.dataset.authMode === mode)),
+    );
 }
 async function authRequest(path, data) {
   const response = await fetch(path, {
@@ -225,11 +283,17 @@ async function authRequest(path, data) {
     signal: AbortSignal.timeout(25000),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Не удалось выполнить действие. Попробуй ещё раз.");
+  if (!response.ok)
+    throw new Error(
+      result.error || "Не удалось выполнить действие. Попробуй ещё раз.",
+    );
   return result;
 }
 function showRecovery(code) {
-  if (typeof code !== "string" || !code) throw new Error("Сервер не вернул код восстановления. Не закрывай страницу и обратись к владельцу сервера.");
+  if (typeof code !== "string" || !code)
+    throw new Error(
+      "Сервер не вернул код восстановления. Не закрывай страницу и обратись к владельцу сервера.",
+    );
   clearPrivate();
   document.body.classList.remove("booting", "locked", "auth-screen");
   document.body.classList.add("recovery-screen");
@@ -239,8 +303,11 @@ function showRecovery(code) {
   $("recovery-panel").hidden = false;
   $("recovery-copy").focus();
 }
-document.querySelectorAll("[data-auth-mode]").forEach((el) => el.onclick = () => setAuthMode(el.dataset.authMode));
-$("auth-recover").onclick = () => setAuthMode(authMode === "recover" ? "login" : "recover");
+document
+  .querySelectorAll("[data-auth-mode]")
+  .forEach((el) => (el.onclick = () => setAuthMode(el.dataset.authMode)));
+$("auth-recover").onclick = () =>
+  setAuthMode(authMode === "recover" ? "login" : "recover");
 $("auth-password-show").onclick = () => {
   const visible = $("auth-password").type === "password";
   $("auth-password").type = visible ? "text" : "password";
@@ -250,18 +317,26 @@ $("auth-password-show").onclick = () => {
 $("auth-form").onsubmit = async (event) => {
   event.preventDefault();
   if ($("auth-submit").disabled) return;
-  if (authMode !== "login" && $("auth-password").value !== $("auth-confirm").value) {
+  if (
+    authMode !== "login" &&
+    $("auth-password").value !== $("auth-confirm").value
+  ) {
     $("auth-error").textContent = "Пароли не совпадают.";
     $("auth-confirm").focus();
     return;
   }
   const mode = authMode;
-  const data = { username: $("auth-username").value.trim(), password: $("auth-password").value };
+  const data = {
+    username: $("auth-username").value.trim(),
+    password: $("auth-password").value,
+  };
   if (mode === "recover") data.recovery_code = $("auth-recovery").value.trim();
   $("auth-submit").disabled = true;
   $("auth-form").setAttribute("aria-busy", "true");
   $("auth-error").textContent = "";
-  document.querySelectorAll("[data-auth-mode],#auth-recover").forEach((el) => el.disabled = true);
+  document
+    .querySelectorAll("[data-auth-mode],#auth-recover")
+    .forEach((el) => (el.disabled = true));
   try {
     const result = await authRequest("/api/auth/" + mode, data);
     $("auth-form").reset();
@@ -272,23 +347,34 @@ $("auth-form").onsubmit = async (event) => {
       await init();
     }
   } catch (error) {
-    $("auth-password").value = $("auth-confirm").value = $("auth-recovery").value = "";
-    $("auth-error").textContent = error instanceof TypeError ? "Нет связи с сервером. Проверь соединение и попробуй снова." : error.message;
+    $("auth-password").value =
+      $("auth-confirm").value =
+      $("auth-recovery").value =
+        "";
+    $("auth-error").textContent =
+      error instanceof TypeError
+        ? "Нет связи с сервером. Проверь соединение и попробуй снова."
+        : error.message;
   } finally {
     $("auth-submit").disabled = false;
     $("auth-form").setAttribute("aria-busy", "false");
-    document.querySelectorAll("[data-auth-mode],#auth-recover").forEach((el) => el.disabled = false);
+    document
+      .querySelectorAll("[data-auth-mode],#auth-recover")
+      .forEach((el) => (el.disabled = false));
   }
 };
 $("recovery-copy").onclick = async () => {
   try {
     await navigator.clipboard.writeText($("recovery-code").textContent);
-    $("recovery-copy-status").textContent = "Скопировано. Сохрани код в безопасном месте.";
+    $("recovery-copy-status").textContent =
+      "Скопировано. Сохрани код в безопасном месте.";
   } catch {
-    $("recovery-copy-status").textContent = "Выдели код и скопируй его вручную.";
+    $("recovery-copy-status").textContent =
+      "Выдели код и скопируй его вручную.";
   }
 };
-$("recovery-saved").onchange = () => $("recovery-continue").disabled = !$("recovery-saved").checked;
+$("recovery-saved").onchange = () =>
+  ($("recovery-continue").disabled = !$("recovery-saved").checked);
 $("recovery-continue").onclick = async () => {
   if (!$("recovery-saved").checked) return;
   $("recovery-code").textContent = "";
@@ -306,29 +392,40 @@ $("password-form").onsubmit = async (event) => {
   $("password-submit").disabled = true;
   $("password-error").textContent = "";
   try {
-    const result = await api("/api/auth/password", { current_password: $("current-password").value, password: $("new-password").value });
+    const result = await api("/api/auth/password", {
+      current_password: $("current-password").value,
+      password: $("new-password").value,
+    });
     $("password-form").reset();
     identityChannel?.postMessage("changed");
     showRecovery(result.recovery_code);
   } catch (error) {
     if (error.stale) return;
     $("password-error").textContent = error.message;
-  } finally { $("password-submit").disabled = false; }
+  } finally {
+    $("password-submit").disabled = false;
+  }
 };
 $("delete-account-form").onsubmit = async (event) => {
   event.preventDefault();
-  if (!$("delete-confirmed").checked || $("delete-account-submit").disabled) return;
+  if (!$("delete-confirmed").checked || $("delete-account-submit").disabled)
+    return;
   $("delete-account-submit").disabled = true;
   $("delete-error").textContent = "";
   try {
-    await api("/api/auth/delete", { password: $("delete-password").value, confirmed: true });
+    await api("/api/auth/delete", {
+      password: $("delete-password").value,
+      confirmed: true,
+    });
     identityChannel?.postMessage("changed");
     showAuth("register", "Аккаунт и его данные удалены.");
   } catch (error) {
     if (error.stale) return;
     $("delete-error").textContent = error.message;
     $("delete-password").value = "";
-  } finally { $("delete-account-submit").disabled = false; }
+  } finally {
+    $("delete-account-submit").disabled = false;
+  }
 };
 $("use-ai").onchange = async () => {
   const enabled = $("use-ai").checked;
@@ -342,7 +439,9 @@ $("use-ai").onchange = async () => {
     if (error.stale) return;
     $("use-ai").checked = !enabled;
     toast(error.message);
-  } finally { $("use-ai").disabled = false; }
+  } finally {
+    $("use-ai").disabled = false;
+  }
 };
 function renderPrivacy() {
   $("encryption-state").textContent = config.privacy?.encrypted
@@ -350,10 +449,13 @@ function renderPrivacy() {
     : "Шифрование при хранении не включено на этом сервере.";
   $("account-card").hidden = isMini || !config.account?.username;
   $("settings-username").textContent = config.account?.username || "";
-  $("use-ai-label").hidden = $("use-ai-state").hidden = typeof config.account?.use_ai !== "boolean";
+  $("use-ai-label").hidden = $("use-ai-state").hidden =
+    typeof config.account?.use_ai !== "boolean";
   $("use-ai").checked = config.account?.use_ai === true;
   $("use-ai-state").textContent = config.account?.use_ai
-    ? config.privacy?.ai_enabled ? "ИИ включён. Запрос и нужный контекст отправляются провайдеру." : "Разрешение включено, но провайдер сейчас недоступен."
+    ? config.privacy?.ai_enabled
+      ? "ИИ включён. Запрос и нужный контекст отправляются провайдеру."
+      : "Разрешение включено, но провайдер сейчас недоступен."
     : "ИИ выключен. Текстовые команды обрабатываются локально, без отправки провайдеру модели.";
 }
 let historyLoaded = false,
@@ -435,7 +537,10 @@ async function api(path, data, options = {}) {
   if (post) h["Idempotency-Key"] = key;
   let r;
   for (let attempt = 0; attempt < 2; attempt++) {
-    if (version !== identityVersion) { requests.delete(controller); throw staleResponse(); }
+    if (version !== identityVersion) {
+      requests.delete(controller);
+      throw staleResponse();
+    }
     try {
       r = await fetch(path, {
         method: post ? "POST" : "GET",
@@ -443,15 +548,22 @@ async function api(path, data, options = {}) {
         credentials: isMini ? "omit" : "same-origin",
         body: post ? JSON.stringify(data) : undefined,
         cache: "no-store",
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(65000)]),
+        signal: AbortSignal.any([
+          controller.signal,
+          AbortSignal.timeout(65000),
+        ]),
       });
       break;
     } catch (err) {
-      if (version !== identityVersion) { requests.delete(controller); throw staleResponse(); }
+      if (version !== identityVersion) {
+        requests.delete(controller);
+        throw staleResponse();
+      }
       if (
         attempt === 0 &&
         post &&
-        !["/api/link", "/api/logout"].includes(path) && !path.startsWith("/api/auth/")
+        !["/api/link", "/api/logout"].includes(path) &&
+        !path.startsWith("/api/auth/")
       ) {
         await new Promise((r) => setTimeout(r, 400));
         continue;
@@ -473,13 +585,20 @@ async function api(path, data, options = {}) {
   requests.delete(controller);
   if (version !== identityVersion) throw staleResponse();
   if (!r.ok) {
-    if (r.status === 401 && (!path.startsWith("/api/auth/") || ["unauthorized", "session_expired"].includes(result.code))) {
+    if (
+      r.status === 401 &&
+      (!path.startsWith("/api/auth/") ||
+        ["unauthorized", "session_expired"].includes(result.code))
+    ) {
       if (isMini)
         lock(
           "Сессия истекла. Закрой Mini App и снова открой его кнопкой бота.",
         );
       else if (result.code === "unauthorized" || authRequired) {
-        showAuth("login", "Сессия завершена. Войди снова, чтобы открыть свои планы.");
+        showAuth(
+          "login",
+          "Сессия завершена. Войди снова, чтобы открыть свои планы.",
+        );
       } else {
         lock(result.error || "Привязка пространства истекла.");
         $("access-link").textContent = "Открыть веб-пространство";
@@ -615,7 +734,13 @@ function setView(name) {
 window.addEventListener("resize", () => {
   if (!privateReady || isMini) return;
   $("channel-label").textContent = matchMedia("(max-width:760px)").matches
-    ? "Орбита · " + { assistant:"ассистент", planner:"мои планы", archive:"поиск", settings:"настройки" }[view]
+    ? "Орбита · " +
+      {
+        assistant: "ассистент",
+        planner: "мои планы",
+        archive: "поиск",
+        settings: "настройки",
+      }[view]
     : "Орбита";
 });
 document
@@ -1269,7 +1394,9 @@ $("link-form").onsubmit = async (e) => {
   e.preventDefault();
   if (
     !(await ask(
-      config.account?.username ? "Подключить Telegram?" : "Переключить аккаунт?",
+      config.account?.username
+        ? "Подключить Telegram?"
+        : "Переключить аккаунт?",
       config.account?.username
         ? "Записи твоего Telegram будут перенесены в этот аккаунт. После подключения сайт, бот и Mini App будут работать с общими планами."
         : "Сайт покажет записи Telegram-аккаунта. Текущие записи останутся в отдельном веб-пространстве. Автоматического объединения нет.",
@@ -1393,8 +1520,11 @@ $("logout").onclick = async () => {
       await authRequest("/api/logout", {});
       identityChannel?.postMessage("changed");
     } catch {
-      $("auth-error").textContent = "Данные скрыты, но сервер не подтвердил выход. Проверь соединение и повтори выход.";
-    } finally { $("auth-submit").disabled = false; }
+      $("auth-error").textContent =
+        "Данные скрыты, но сервер не подтвердил выход. Проверь соединение и повтори выход.";
+    } finally {
+      $("auth-submit").disabled = false;
+    }
     return;
   }
   if (!config.account?.linked) return;
@@ -1718,12 +1848,13 @@ async function init() {
     config = await api("/api/config");
     if (version !== identityVersion) return;
     timezone = config.account.timezone;
-    if (config.account.username) $("account-name").textContent = config.account.username;
+    if (config.account.username)
+      $("account-name").textContent = config.account.username;
     $("account-channel").textContent = config.account.private
       ? "Личное пространство"
       : config.account.linked
-      ? "Связано с Telegram"
-      : "Веб-версия";
+        ? "Связано с Telegram"
+        : "Веб-версия";
     renderAIState();
     renderPrivacy();
     $("telegram-state").textContent = config.account.linked
@@ -1750,8 +1881,11 @@ async function init() {
       $("open-bot").href = "https://t.me/" + username;
       $("open-bot").hidden = false;
     }
-    $("logout").hidden = isMini || !(config.account.linked || config.account.username);
-    $("logout").textContent = config.account.username ? "Выйти из аккаунта" : "Отвязать Telegram от сайта";
+    $("logout").hidden =
+      isMini || !(config.account.linked || config.account.username);
+    $("logout").textContent = config.account.username
+      ? "Выйти из аккаунта"
+      : "Отвязать Telegram от сайта";
     $("logout").disabled = false;
     labels();
     privateReady = true;
@@ -1765,13 +1899,17 @@ async function init() {
   }
 }
 init();
-if (identityChannel) identityChannel.onmessage = () => {
-  if (isMini) return;
-  clearPrivate();
-  init();
-};
+if (identityChannel)
+  identityChannel.onmessage = () => {
+    if (isMini) return;
+    clearPrivate();
+    init();
+  };
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted && !isMini) { clearPrivate(); init(); }
+  if (event.persisted && !isMini) {
+    clearPrivate();
+    init();
+  }
 });
 // Lightweight cross-channel refresh; don't interrupt forms, speech, long lists or typing.
 setInterval(() => {
