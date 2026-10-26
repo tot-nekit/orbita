@@ -134,6 +134,12 @@ def main():
     parser=argparse.ArgumentParser(description='Орбита: сайт + Telegram + резервное копирование')
     parser.add_argument('mode',nargs='?',choices=['web','bot','all','backup','doctor'],default='all');args=parser.parse_args()
     if args.mode=='doctor':return doctor()
+    if os.getenv('HOSTING_PROFILE')=='alwaysdata':
+        print('alwaysdata Free: start the website with python hosted.py and scheduled tasks with python scheduled.py.',flush=True)
+        return 1
+    if args.mode=='bot' and os.getenv('TELEGRAM_MODE')=='webhook':
+        print('Webhook mode uses the website and scheduled.py; polling must remain stopped.',flush=True)
+        return 1
     if sys.version_info<(3,11):raise SystemExit('Нужен Python 3.11+')
     if args.mode=='backup':return backup_worker()
     stop=threading.Event();previous,received=install_stop_handlers(stop)
@@ -154,7 +160,7 @@ def main():
             env=dict(os.environ,PORT=str(app_port))
             if edge:env['HOST']='127.0.0.1'
             commands.append(('web',[sys.executable,'-m','app.server'],env))
-        if args.mode=='bot' or (args.mode=='all' and os.getenv('TELEGRAM_BOT_TOKEN')):
+        if args.mode=='bot' or (args.mode=='all' and os.getenv('TELEGRAM_BOT_TOKEN') and os.getenv('TELEGRAM_MODE','polling')=='polling'):
             commands.append(('bot',[sys.executable,'-m','app.telegram_bot'],dict(os.environ)))
         if has_web and os.getenv('BACKUP_ENABLED','1')!='0':
             commands.append(('backup',[sys.executable,str(config.ROOT/'run.py'),'backup'],dict(os.environ)))

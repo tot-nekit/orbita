@@ -7,6 +7,9 @@
 !run.py
 !backup.py
 !manage.py
+!hosted.py
+!scheduled.py
+!setup_webhook.py
 !Caddyfile
 !requirements.txt
 .git

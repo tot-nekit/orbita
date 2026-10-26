@@ -24,3 +24,7 @@ STT_API_BASE = os.getenv('STT_BASE_URL', API_BASE).rstrip('/')
 STT_API_KEY = os.getenv('STT_API_KEY', API_KEY)
 # Compatible chat endpoints do not necessarily support audio transcription.
 STT_ENABLED = os.getenv('STT_ENABLED', '0' if 'vyceai.com' in STT_API_BASE else '1') == '1'
+
+
+def request_body_limit():
+    return (2 if os.getenv('HOSTING_PROFILE') == 'alwaysdata' else 12) * 1024 * 1024

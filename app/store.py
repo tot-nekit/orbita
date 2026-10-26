@@ -77,6 +77,8 @@ def init():
         CREATE TABLE IF NOT EXISTS auth_limits(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,expires REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS telegram_links(telegram_owner TEXT PRIMARY KEY,user_owner TEXT UNIQUE NOT NULL);
         CREATE TABLE IF NOT EXISTS ai_usage(owner TEXT,day TEXT,requests INTEGER NOT NULL,PRIMARY KEY(owner,day));
+        CREATE TABLE IF NOT EXISTS telegram_inbox(id INTEGER PRIMARY KEY,owner TEXT NOT NULL,digest TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,next_try REAL NOT NULL DEFAULT 0,lease_until REAL NOT NULL DEFAULT 0,lease_token TEXT,created REAL NOT NULL,last_error TEXT);
+        CREATE INDEX IF NOT EXISTS telegram_inbox_pending ON telegram_inbox(status,next_try,lease_until,id);
         CREATE TABLE IF NOT EXISTS notifications(event_id INTEGER,due TEXT,owner TEXT,status TEXT,attempts INTEGER DEFAULT 0,next_try REAL DEFAULT 0,lease_until REAL DEFAULT 0,last_error TEXT,lease_token TEXT,PRIMARY KEY(event_id,due));
         '''
         for statement in schema.split(';'):

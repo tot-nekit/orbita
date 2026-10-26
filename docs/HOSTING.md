@@ -1,5 +1,7 @@
 # Эксплуатация
 
+Для выбранного бесплатного shared hosting см. [ALWAYSDATA.md](ALWAYSDATA.md): сайт, webhook и scheduled task. Описанные ниже Caddy, Docker и постоянные workers относятся к собственному VPS.
+
 Один экземпляр: внешний HTTPS proxy → Caddy контейнера → Python на loopback. В том же контейнере работают Telegram polling (если настроен) и резервное копирование. Горизонтальное масштабирование SQLite и два polling-процесса на один токен не поддерживаются.
 
 ## Запуск и остановка

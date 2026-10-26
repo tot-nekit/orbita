@@ -14,6 +14,7 @@ COPY resources ./resources
 COPY run.py ./run.py
 COPY backup.py ./backup.py
 COPY manage.py ./manage.py
+COPY hosted.py scheduled.py setup_webhook.py ./
 COPY Caddyfile ./Caddyfile
 RUN mkdir -p /app/data && useradd --uid 10001 --create-home orbita && chown -R orbita:orbita /app
 USER orbita

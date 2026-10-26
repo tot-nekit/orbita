@@ -6,7 +6,7 @@ from collections import defaultdict,deque
 from . import config,store,service,ai,security,notifications,auth,database
 from .context import scope,owner
 from .dates import clock
-ROOT=config.ROOT/'app/static';VERSION='3.0.0';log=logging.getLogger('orbita')
+ROOT=config.ROOT/'app/static';VERSION='3.1.0';log=logging.getLogger('orbita')
 AUTH_ATTEMPTS=defaultdict(deque);RATE_LOCK=threading.Lock()
 STATIC={'/':'index.html','/mini':'index.html','/mini/':'index.html','/style.css':'style.css','/app.js':'app.js','/favicon.svg':'favicon.svg','/manifest.webmanifest':'manifest.webmanifest'}
 
@@ -91,12 +91,21 @@ class Handler(BaseHTTPRequestHandler):
                 expected=os.getenv('PUBLIC_BASE_URL','').rstrip('/') if database.production() else None
                 if origin and (origin!=expected if expected else urlsplit(origin).netloc!=self.headers.get('Host')):return self.output({'error':'Cross-origin запрос запрещён.'},403)
                 n=int(self.headers.get('Content-Length','0'))
-                if n<=0 or n>12*1024*1024:return self.output({'error':'Максимум 12 МБ.'},413)
+                maximum=config.request_body_limit()
+                if n<=0 or n>maximum:return self.output({'error':f'Максимум {maximum//(1024*1024)} МБ.'},413)
+                if u.path=='/api/telegram/webhook' and n>256*1024:return self.output({'error':'Слишком большое обновление.'},413)
                 raw=self.rfile.read(n)
                 if u.path!='/api/transcribe':
                     if 'application/json' not in self.headers.get('Content-Type',''):return self.output({'error':'Ожидается JSON.'},415)
                     data=json.loads(raw)
                     if not isinstance(data,dict):raise ValueError('Ожидается JSON-объект.')
+                if u.path=='/api/telegram/webhook':
+                    if os.getenv('TELEGRAM_MODE','polling')!='webhook' or not os.getenv('TELEGRAM_BOT_TOKEN'):return self.output({'error':'Webhook не настроен.'},404)
+                    from . import webhooks
+                    try:accepted=webhooks.receive(data,self.headers.get('X-Telegram-Bot-Api-Secret-Token',''))
+                    except webhooks.QueueFull as exc:return self.output({'error':str(exc)},503)
+                    if accepted:webhooks.wake()
+                    return self.output({'ok':True})
                 if u.path=='/api/logout':
                     auth.revoke(security.cookie_token(self.headers.get('Cookie')))
                     return self.output({'ok':True},headers={'Set-Cookie':self.cookie()})
@@ -168,12 +177,14 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/health':return self.output({'ok':True,'version':VERSION})
         if path=='/api/config':
             acc=store.account();registered=auth.user();linked=bool(acc['chat_id']) or owner().startswith('tg:')
-            return self.output({'llm':bool(config.API_KEY),'stt':bool(config.STT_ENABLED and config.STT_API_KEY),'model':config.MODEL if config.API_KEY else None,'fallback_model':config.FALLBACK_MODEL if config.API_KEY else None,'version':VERSION,'account':{'linked':linked,'timezone':acc['timezone'],'notify':bool(acc['notify']),'chat_connected':bool(acc['chat_id']),'username':registered['username'] if registered else None,'private':bool(registered),'use_ai':bool(acc['use_ai'])},'privacy':{'encrypted':database.encryption_enabled(),'ai_enabled':bool(config.API_KEY and acc['use_ai'])},'telegram':{'configured':bool(os.getenv('TELEGRAM_BOT_TOKEN')),'username':os.getenv('TELEGRAM_BOT_USERNAME','').lstrip('@'),'worker_online':notifications.health()}})
+            # Platform limits are public settings, never credentials.
+            limits={'upload_bytes':config.request_body_limit()}
+            return self.output({'llm':bool(config.API_KEY),'stt':bool(config.STT_ENABLED and config.STT_API_KEY),'model':config.MODEL if config.API_KEY else None,'fallback_model':config.FALLBACK_MODEL if config.API_KEY else None,'version':VERSION,'limits':limits,'account':{'linked':linked,'timezone':acc['timezone'],'notify':bool(acc['notify']),'chat_connected':bool(acc['chat_id']),'username':registered['username'] if registered else None,'private':bool(registered),'use_ai':bool(acc['use_ai'])},'privacy':{'encrypted':database.encryption_enabled(),'ai_enabled':bool(config.API_KEY and acc['use_ai'])},'telegram':{'configured':bool(os.getenv('TELEGRAM_BOT_TOKEN')),'username':os.getenv('TELEGRAM_BOT_USERNAME','').lstrip('@'),'worker_online':notifications.health()}})
         if path=='/api/history':
             sid=self.sid(q.get('session',''))
             return self.output({'messages':store.history(sid),'actions':service.dialog_actions(sid)})
         if path=='/api/notifications':
-            return self.output({'notifications':notifications.delivery_status(max(1,min(200,int(q.get('limit','100'))))),'worker_online':notifications.health(),'linked':bool(store.account()['chat_id']) or owner().startswith('tg:')})
+            return self.output({'notifications':notifications.delivery_status(max(1,min(200,int(q.get('limit','100'))))),'worker_online':notifications.health(),'interval_seconds':60 if os.getenv('TELEGRAM_MODE')=='webhook' else 15,'linked':bool(store.account()['chat_id']) or owner().startswith('tg:')})
         if path=='/api/events':
             limit=max(1,min(200,int(q.get('limit','50'))));offset=max(0,int(q.get('offset','0')))
             bucket=q.get('bucket')

@@ -176,6 +176,8 @@ def deliver(client,result):
         client.call('sendMessage',payload)
 
 def run():
+    if os.getenv('TELEGRAM_MODE','polling')!='polling' or os.getenv('HOSTING_PROFILE')=='alwaysdata':
+        raise SystemExit('Webhook использует сайт и scheduled.py. Постоянный polling отключён.')
     logging.basicConfig(level=logging.INFO);store.init();client=Telegram();client.call('getMe')
     webhook=client.call('getWebhookInfo')
     if webhook.get('url'):raise SystemExit('У бота настроен webhook. Удали его через deleteWebhook перед long polling; автоматически настройки не меняем.')

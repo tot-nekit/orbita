@@ -72,6 +72,9 @@ def open_connection(path, readonly=False):
 
 
 def validate_runtime():
+    import ipaddress
+    for value in os.getenv('TRUSTED_PROXY_CIDRS', '').split(','):
+        if value.strip():ipaddress.ip_network(value.strip())
     if production():
         from urllib.parse import urlsplit
         url = urlsplit(os.getenv('PUBLIC_BASE_URL', ''))
@@ -83,3 +86,11 @@ def validate_runtime():
             raise RuntimeError('В production нужен постоянный APP_SESSION_SECRET длиной не менее 32 символов.')
     if encryption_enabled():
         key_bytes()
+    if os.getenv('TELEGRAM_MODE','polling') not in ('polling','webhook'):
+        raise RuntimeError('TELEGRAM_MODE должен быть polling или webhook.')
+    if os.getenv('TELEGRAM_MODE')=='webhook' and os.getenv('TELEGRAM_BOT_TOKEN'):
+        import re
+        if not re.fullmatch(r'[A-Za-z0-9_-]{32,256}',os.getenv('TELEGRAM_WEBHOOK_SECRET','')):
+            raise RuntimeError('В режиме webhook нужен отдельный TELEGRAM_WEBHOOK_SECRET.')
+    if os.getenv('HOSTING_PROFILE')=='alwaysdata' and os.getenv('TELEGRAM_BOT_TOKEN') and os.getenv('TELEGRAM_MODE')!='webhook':
+        raise RuntimeError('На alwaysdata Free используй webhook вместо постоянного polling.')

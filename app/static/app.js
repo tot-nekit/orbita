@@ -1682,11 +1682,15 @@ $("mic").onclick = async () => {
       try {
         const h = headers();
         h["Content-Type"] = mime;
+        const audio = new Blob(chunks, { type: mime });
+        const limit = config.limits?.upload_bytes || 12 * 1024 * 1024;
+        if (audio.size > limit)
+          throw new Error(`Запись слишком большая. Максимум ${Math.floor(limit / 1024 / 1024)} МБ. Запиши короче или введи текст.`);
         const r = await fetch("/api/transcribe", {
           method: "POST",
           headers: h,
           credentials: isMini ? "omit" : "same-origin",
-          body: new Blob(chunks, { type: mime }),
+          body: audio,
           signal: AbortSignal.timeout(65000),
         });
         let data;
@@ -2010,6 +2014,9 @@ async function loadNotifications() {
           ? "Сервис доставки на связи. "
           : "Сервис доставки сейчас недоступен. ") +
       (summary || "Запланированных напоминаний пока нет.") +
+      (delivery.interval_seconds === 60
+        ? " Проверяем сроки примерно раз в минуту; возможна небольшая задержка."
+        : "") +
       " Отправка не подтверждает прочтение.";
   } catch (error) {
     if (version !== identityVersion || error.stale) return;

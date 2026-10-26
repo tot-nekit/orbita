@@ -17,12 +17,14 @@ def enqueue(now=None):
             if lag<0:continue
             db.execute("INSERT INTO notifications(event_id,due,owner,status) VALUES(?,?,?,?) ON CONFLICT(event_id,due) DO UPDATE SET status='pending',attempts=0,next_try=0,lease_until=0 WHERE notifications.status='cancelled' AND excluded.status='pending'",(e['id'],due.isoformat(),e['owner'],'pending' if lag<=3600 else 'missed'))
 
-def tick(client,now=None):
-    now=now or datetime.now(timezone.utc);stamp=now.timestamp();enqueue(now);sent=0
+def tick(client,now=None,max_messages=None,deadline=None):
+    now=now or datetime.now(timezone.utc);stamp=now.timestamp();enqueue(now);sent=0;processed=0
     while True:
+        if max_messages is not None and processed>=max_messages or deadline is not None and time.monotonic()>=deadline:break
         with store.atomic(),store.connect() as db:
             row=db.execute("SELECT * FROM notifications WHERE status IN ('pending','retry','sending') AND next_try<=? AND lease_until<=? ORDER BY due LIMIT 1",(stamp,stamp)).fetchone()
             if not row:break
+            processed+=1
             r=dict(row)
             lease=secrets.token_hex(16)
             db.execute("UPDATE notifications SET status='sending',lease_until=?,lease_token=? WHERE event_id=? AND due=?",(stamp+90,lease,r['event_id'],r['due']))
@@ -42,7 +44,8 @@ def tick(client,now=None):
 
 def health():
     last=store.runtime('bot_heartbeat')
-    return bool(last and time.time()-float(last)<90)
+    import os
+    return bool(last and time.time()-float(last)<(180 if os.getenv('TELEGRAM_MODE')=='webhook' else 90))
 
 def delivery_status(limit=100,now=None):
     """Current occurrence only; an old delivery is never shown for a moved record."""
@@ -54,7 +57,7 @@ def delivery_status(limit=100,now=None):
         for row in rows:
             e=dict(row);due=due_at(e)
             occurrence=db.execute('SELECT status,attempts FROM notifications WHERE owner=? AND event_id=? AND due=?',(owner(),e['id'],due.isoformat())).fetchone()
-            status='demo' if e['source_id'] is not None else 'not_connected' if not owner().startswith('tg:') or not acc['chat_id'] else 'disabled' if not acc['notify'] else occurrence['status'] if occurrence else 'scheduled' if due>now else 'missed' if (now-due).total_seconds()>3600 else 'pending'
+            status='demo' if e['source_id'] is not None else 'not_connected' if not owner().startswith(('tg:','u:')) or not acc['chat_id'] else 'disabled' if not acc['notify'] else occurrence['status'] if occurrence else 'scheduled' if due>now else 'missed' if (now-due).total_seconds()>3600 else 'pending'
             results.append({'event_id':e['id'],'status':status,'due':due.isoformat(),'attempts':occurrence['attempts'] if occurrence else 0})
     return results
 

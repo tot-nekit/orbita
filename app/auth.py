@@ -190,7 +190,7 @@ def delete_account(data):
         prefix = owner() + ':'
         for table, field in [('messages', 'session'), ('sessions', 'id')]:
             db.execute(f'DELETE FROM {table} WHERE substr({field},1,?)=?', (len(prefix), prefix))
-        for table in ('events', 'notifications', 'receipts', 'link_codes', 'accounts', 'auth_sessions', 'ai_usage', 'users'):
+        for table in ('events', 'notifications', 'receipts', 'link_codes', 'accounts', 'auth_sessions', 'ai_usage', 'telegram_inbox', 'users'):
             db.execute(f'DELETE FROM {table} WHERE owner=?', (owner(),))
         db.execute('DELETE FROM telegram_links WHERE user_owner=?', (owner(),))
     return {'ok': True}
@@ -219,6 +219,7 @@ def link_telegram(code):
         db.execute('UPDATE events SET source_id=NULL WHERE owner=? AND source_id IN (SELECT source_id FROM events WHERE owner=?)', (target, owner()))
         db.execute('UPDATE events SET owner=? WHERE owner=?', (owner(), target))
         db.execute('UPDATE notifications SET owner=? WHERE owner=?', (owner(), target))
+        db.execute('UPDATE telegram_inbox SET owner=? WHERE owner=?', (owner(), target))
         for row in db.execute('SELECT id FROM sessions WHERE substr(id,1,?)=?', (len(target)+1, target+':')).fetchall():
             old_sid = row[0]
             new_sid = owner() + old_sid[len(target):]
