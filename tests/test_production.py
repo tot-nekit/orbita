@@ -60,7 +60,7 @@ class Production(unittest.TestCase):
                 self.assertTrue(req('/api/config',cookie=cookie)[1]['privacy']['encrypted'])
                 self.assertEqual(req('/api/events/save',{'title':'Encrypted restart canary'},cookie)[0],200)
                 self.assertNotIn(b'Encrypted restart canary',Path(env['DATABASE_PATH']).read_bytes())
-                backup=subprocess.run([sys.executable,'backup.py'],cwd=ROOT,env=env,capture_output=True,timeout=20)
+                backup=subprocess.run([sys.executable,'-m','scripts.backup'],cwd=ROOT,env=env,capture_output=True,timeout=20)
                 self.assertEqual(backup.returncode,0)
                 copies=list((Path(tmp)/'backups').glob('*.sqlite3'))
                 self.assertTrue(copies)

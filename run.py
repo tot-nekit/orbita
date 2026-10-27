@@ -60,7 +60,7 @@ def restore_handlers(previous):
     for signum,handler in previous.items():signal.signal(signum,handler)
 
 def backup_worker():
-    from backup import create_backup,rotate_backups,newest_backup_age,send_offsite
+    from scripts.backup import create_backup,rotate_backups,newest_backup_age,send_offsite
     interval,keep=backup_settings();stop=threading.Event()
     previous,received=install_stop_handlers(stop)
     try:
@@ -153,7 +153,7 @@ def main():
     parser.add_argument('mode',nargs='?',choices=['web','bot','all','backup','doctor'],default='all');args=parser.parse_args()
     if args.mode=='doctor':return doctor()
     if os.getenv('HOSTING_PROFILE')=='alwaysdata':
-        print('alwaysdata Free: start the website with python hosted.py and scheduled tasks with python scheduled.py.',flush=True)
+        print('alwaysdata Free: start the website with python -m scripts.hosted and scheduled tasks with python -m scripts.scheduled.',flush=True)
         return 1
     if args.mode=='bot' and os.getenv('TELEGRAM_MODE')=='webhook':
         print('Webhook mode uses the website and scheduled.py; polling must remain stopped.',flush=True)

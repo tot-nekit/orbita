@@ -8,7 +8,7 @@ from app.context import scope
 
 
 def backup_if_due():
-    from backup import create_backup, rotate_backups
+    from scripts.backup import create_backup, rotate_backups
     from run import backup_settings
     interval, keep = backup_settings()
     now = time.time()

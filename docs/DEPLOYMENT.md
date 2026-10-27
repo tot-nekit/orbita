@@ -44,7 +44,7 @@ cd ~/orbita
 sudo docker compose -f compose.yaml -f compose.public.yaml ps
 sudo docker compose -f compose.yaml -f compose.public.yaml logs --tail 100 orbita
 sudo docker compose -f compose.yaml -f compose.public.yaml up -d --build orbita
-sudo docker compose -f compose.yaml -f compose.public.yaml exec orbita python backup.py
+sudo docker compose -f compose.yaml -f compose.public.yaml exec orbita python -m scripts.backup
 sudo nginx -t && sudo systemctl reload nginx
 sudo fail2ban-client status sshd
 ```

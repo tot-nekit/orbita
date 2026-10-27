@@ -17,7 +17,7 @@ DATABASE_KEY — 32 случайных байта, закодированных 
 Создать новый ключ, не выводя его в терминал:
 
 ```sh
-python manage.py keygen --output data/.database_key
+python -m scripts.manage keygen --output data/.database_key
 ```
 
 Команда не перезаписывает существующий файл. Скопируй ключ в отдельное защищённое хранилище, а не в Git или архив проекта. Без исходного ключа база и её копии не читаются. Изменение переменной окружения не выполняет ротацию ключа существующей базы. Защита диска не защищает ключ, лежащий рядом с ним, от полного захвата работающего сервера; для этого ключ хранится отдельно в секретах хостинга.
@@ -29,7 +29,7 @@ python manage.py keygen --output data/.database_key
 3. Установи зависимости из requirements.txt и создай новый зашифрованный файл:
 
 ```sh
-DATABASE_KEY_FILE=data/.database_key python manage.py encrypt --source data/orbita.sqlite3 --output data/orbita-encrypted.sqlite3
+DATABASE_KEY_FILE=data/.database_key python -m scripts.manage encrypt --source data/orbita.sqlite3 --output data/orbita-encrypted.sqlite3
 ```
 
 Команда использует SQLCipher export, проверяет целостность и количество строк всех таблиц. Исходная база остаётся на месте, существующий файл назначения не перезаписывается.
@@ -40,7 +40,7 @@ DATABASE_KEY_FILE=data/.database_key python manage.py encrypt --source data/orbi
 Старые общие web-записи не получает первый зарегистрировавшийся пользователь. После регистрации владелец сервера может явно перенести их в нужный аккаунт локальной командой:
 
 ```sh
-python manage.py adopt-legacy --username YOUR_ALIAS --confirm
+python -m scripts.manage adopt-legacy --username YOUR_ALIAS --confirm
 ```
 
 Это операция администратора с доступом к базе, не публичный API. При конфликте идентификаторов диалога перенос отменяется транзакционно. Telegram связывается только по одноразовому коду из своего бота, с явным подтверждением переноса.

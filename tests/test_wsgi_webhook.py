@@ -190,7 +190,7 @@ class ManagedHosting(unittest.TestCase):
         self.assertEqual(self.req('/api/telegram/webhook',self.update(21),secret=SECRET)[0],503)
 
     def test_scheduled_backup_is_verified_once_per_interval(self):
-        from scheduled import backup_if_due
+        from scripts.scheduled import backup_if_due
         self.assertTrue(backup_if_due())
         self.assertFalse(backup_if_due())
         self.assertEqual(len(list((Path(self.tmp.name)/'backups').glob('*.sqlite3'))),1)

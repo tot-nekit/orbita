@@ -7,7 +7,7 @@ from pathlib import Path
 import secrets
 from urllib.parse import urlsplit
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def prepare(url, private_dir):
@@ -50,7 +50,7 @@ def main():
     try:prepare(args.url, args.private_dir)
     except (ValueError, OSError) as exc:raise SystemExit(str(exc)) from None
     print('Созданы приватные .env и ключ базы. Секреты не выводятся. Сохрани ключ отдельно от хостинга.')
-    print('Дальше: сайт — python hosted.py; задача раз в минуту — python scheduled.py. См. docs/ALWAYSDATA.md.')
+    print('Дальше: сайт — python -m scripts.hosted; задача раз в минуту — python -m scripts.scheduled. См. docs/ALWAYSDATA.md.')
 
 
 if __name__ == '__main__':main()

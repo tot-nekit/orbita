@@ -1,6 +1,6 @@
 # Орбита 3.3.2
 
-Личный планировщик для телефона и компьютера: задачи, встречи, напоминания, поиск и команды на русском. Автор — **Никита Ломовцев · [tot-nekit](https://github.com/tot-nekit)**.
+Личный планировщик для телефона и компьютера: задачи, встречи, напоминания, поиск и команды на русском. 
 
 **Рабочий сайт:** [https://213.171.29.94/](https://213.171.29.94/)
 
@@ -25,7 +25,7 @@
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python configure.py
+.venv/bin/python -m scripts.configure
 .venv/bin/python run.py all
 ```
 
@@ -88,7 +88,7 @@ AI нового аккаунта выключен. Простые команды
 Production требует HTTPS origin, Secure cookies, регистрацию, SQLCipher и постоянные ключи. Секреты, данные, логи и архивы исключены из Git и Docker build context. AUTH_REQUIRED=0 разрешён только как явный локальный режим общего пространства.
 
 ```sh
-.venv/bin/python test.py
+.venv/bin/python -m scripts.test
 npm install
 npx playwright install chromium
 npm run test:ui

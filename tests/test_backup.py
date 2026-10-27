@@ -10,7 +10,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
-import backup
+from scripts import backup
 from app import database
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -125,7 +125,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 from app import config, database
-import backup
+from scripts import backup
 with closing(database.open_connection(config.DB_PATH)) as db:
     db.execute('PRAGMA journal_mode=WAL')
     db.execute('CREATE TABLE sample(value TEXT)')

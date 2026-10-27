@@ -48,7 +48,7 @@ class HostedProduction(unittest.TestCase):
                     return response.status, result, response.headers
 
             def start():
-                child = subprocess.Popen([sys.executable, 'hosted.py'], cwd=ROOT, env=env,
+                child = subprocess.Popen([sys.executable, '-m', 'scripts.hosted'], cwd=ROOT, env=env,
                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 deadline = time.monotonic()+15
                 while time.monotonic() < deadline and child.poll() is None:
@@ -90,7 +90,7 @@ class HostedProduction(unittest.TestCase):
                 self.assertEqual(req('/api/events/save', {'title':'Managed encrypted restart canary'}, cookie)[0], 200)
                 for path in Path(tmp).glob('private.sqlite3*'):
                     self.assertNotIn(b'Managed encrypted restart canary', path.read_bytes())
-                result = subprocess.run([sys.executable, 'scheduled.py'], cwd=ROOT, env=env, capture_output=True, timeout=25)
+                result = subprocess.run([sys.executable, '-m', 'scripts.scheduled'], cwd=ROOT, env=env, capture_output=True, timeout=25)
                 self.assertEqual(result.returncode, 0)
                 copies = list((Path(tmp)/'backups').glob('*.sqlite3'))
                 self.assertEqual(len(copies), 1)

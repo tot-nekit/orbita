@@ -1,10 +1,8 @@
 ОРБИТА 3.2
-Автор: Никита Ломовцев (tot-nekit).
-
 Новая установка, Python 3.11+:
 1. python3 -m venv .venv
 2. .venv/bin/python -m pip install -r requirements.txt
-3. .venv/bin/python configure.py
+3. .venv/bin/python -m scripts.configure
 4. .venv/bin/python run.py all
 5. Открой http://localhost:8000, создай аккаунт и сохрани код восстановления.
 

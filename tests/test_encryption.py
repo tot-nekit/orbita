@@ -60,7 +60,7 @@ class Encryption(unittest.TestCase):
         code="""
 import os
 from pathlib import Path
-from manage import encrypt_copy
+from scripts.manage import encrypt_copy
 from app import database
 target=Path(os.environ['DATABASE_PATH'])
 source=target.with_name('legacy.db')

@@ -1,7 +1,7 @@
 """Interactive LOCAL setup. Never run through shared chat with real credentials."""
 import getpass,secrets,os,re,json,base64
 from pathlib import Path
-ROOT=Path(__file__).resolve().parent
+ROOT=Path(__file__).resolve().parents[1]
 
 def main():
     print('Орбита: настройка сайта и Telegram. Секреты вводятся скрыто и остаются в локальном .env.')

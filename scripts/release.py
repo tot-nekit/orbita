@@ -6,14 +6,13 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 FILES = ('.dockerignore', '.gitignore', '.env.example', 'Caddyfile', 'Dockerfile',
-         'LICENSE', 'README.md', 'START_HERE.txt', 'Start.command', 'backup.py',
-         'compose.yaml', 'configure.py', 'hosted.py', 'manage.py', 'package.json',
-         'package-lock.json', 'prepare_hosted.py', 'release.py', 'requirements.txt',
-         'run.py', 'scheduled.py', 'setup_webhook.py', 'start-bot.sh', 'start.bat',
-         'start.sh', 'test.py')
-FOLDERS = ('app', 'resources', 'docs', 'tests', '.github')
+         'LICENSE', 'README.md', 'START_HERE.txt', 'Start.command', 'compose.yaml',
+         'package.json', 'package-lock.json', 'requirements.txt', 'run.py',
+         'start-bot.sh', 'start.bat', 'start.sh')
+
+FOLDERS = ('app', 'resources', 'docs', 'tests', 'scripts', '.github')
 BLOCKED = {'.env', '__pycache__', '.DS_Store', 'node_modules', 'data', 'backups'}
 SENSITIVE = re.compile(rb'sk-[A-Za-z0-9_-]{28,}|[0-9]{8,12}:[A-Za-z0-9_-]{30,}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----')
 
