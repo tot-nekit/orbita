@@ -1,4 +1,4 @@
-import re
+import re,time
 from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
 from . import store, ai, config
@@ -13,6 +13,8 @@ def _intent(text):
     s=unquoted(text).lower().replace('ё','е').strip()
     s=re.sub(r'^(?:(?:привет|орбита|пожалуйста|давай|можешь|можете|можно|ты можешь)[,!\s]+)+','',s)
     if re.match(r'^(?:не\b|как\b|зачем\b|почему\b|что значит\b|расскажи\b|объясни\b)',s):return None
+    if re.match(r'^(?:создай|добавь|запиши|сохрани)\s+(?:мне\s+)?заметк[ау]\b',s):return 'note_create'
+    if re.match(r'^(?:найди|покажи|открой)\s+(?:мои\s+)?заметк[а-я]*\b',s):return 'note_search'
     if re.match(r'^(?:что (?:у меня )?(?:сегодня|завтра|послезавтра|на\b)|какие (?:у меня )?(?:встречи|задачи|планы|напоминания))\b',s):return 'list'
     if re.match(r'^(?:запиши(?:те)?|мне (?:нужно|надо)|(?:я )?(?:хочу|хотел(?:а)? бы)\s+(?:(?:сегодня|завтра|послезавтра)\s+)?(?:добавить|создать|записать|купить|отправить|позвонить|подготовить|сделать|встретиться|встречу|созвон|задачу|напоминание))\b',s):return 'create'
     if re.match(r'^(?:(?:у меня|в\s+\S+|сегодня|завтра|послезавтра)\s+)*(?:встреча|созвон)\b',s) and re.search(r'\b(?:сегодня|завтра|послезавтра|понедельник\w*|вторник\w*|сред\w*|четверг\w*|пятниц\w*|суббот\w*|воскресень\w*|через)\b|\d',s):return 'create'
@@ -30,8 +32,9 @@ def _intent(text):
 def _conversation(text,st):
     """Cheap social replies and deterministic refusals, also during confirmation."""
     s=re.sub(r'\s+',' ',text.lower().replace('ё','е')).strip(' \t\n.,!?🙂👋')
-    help_text=('Я — Орбита. Помогу создать задачу, встречу или напоминание, показать планы, найти, изменить или удалить запись. '
-               'Например: «Напомни завтра в 10 позвонить Ивану» или «Что у меня сегодня?»')
+    help_text=('Помогу записать задачу, встречу или напоминание, найти и изменить планы, сохранить заметку и выбрать, с чего начать день. '
+               'Перед созданием покажу детали и спрошу подтверждение. Например: «Напомни завтра в 10 позвонить Ивану», '
+               '«Сохрани заметку: идеи подарка» или «Помоги спланировать день».')
     msg=None
     if re.fullmatch(r'(?:привет(?:ик)?|здравствуй(?:те)?|доброе утро|добрый (?:день|вечер)|хай|hello|hi)(?:[, ]+орбита)?',s):
         msg='Привет! Что запишем?'
@@ -62,7 +65,7 @@ def _conversation(text,st):
         return {'action':'reply','reply':msg}
     return None
 
-def validate(data, current=None):
+def validate(data, current=None, now_value=None):
     e=dict(current or {'title':'','kind':'task','date':None,'time':None,'duration':60,'status':'active','timezone':'Europe/Moscow'})
     for k in ('title','kind','date','time','duration','status','timezone'):
         if k in data:e[k]=data[k]
@@ -90,6 +93,14 @@ def validate(data, current=None):
             raise ValueError('Такого локального времени нет из-за перевода часов. Выбери другое время.')
         if aware.utcoffset()!=naive.replace(tzinfo=zone,fold=1).utcoffset():
             raise ValueError('Это время неоднозначно из-за перевода часов. Выбери время после перехода.')
+        # Historical records may be edited without scheduling a new reminder.
+        # Compare schedule fields, not request keys: forms submit full records.
+        unchanged_reminder=(current is not None and current.get('kind')=='reminder' and
+                            all(e.get(k)==current.get(k) for k in ('date','time','timezone')))
+        if e['kind']=='reminder' and not unchanged_reminder:
+            now=clock(e['timezone'],now_value)
+            if aware.astimezone(timezone.utc)<now.astimezone(timezone.utc):
+                raise ValueError('Нельзя поставить напоминание на прошедшую дату или время. Выбери будущее время.')
     return e
 
 def local_plan(text,now,state):
@@ -131,6 +142,12 @@ def local_plan(text,now,state):
             else:p['_field']='title'
         return p
     intent=_intent(text)
+    if intent in ('note_create','note_search'):
+        content=re.sub(r'^(?:создай|добавь|запиши|сохрани|найди|покажи|открой)\s+(?:мне\s+|мои\s+)?заметк[а-я]*\s*:?\s*','',text.strip(),flags=re.I)
+        if intent=='note_search':return {'action':intent,'query':content.strip(' «»"')}
+        title,sep,body=content.partition('\n')
+        if not title.strip():return {'action':'clarify','question':'Что записать в заметку? Например: «Сохрани заметку: идеи для отпуска».'}
+        return {'action':intent,'title':title.strip(' «»"')[:200],'body':body if sep else ''}
     if intent=='search':return {'action':'search','query':text}
     if intent=='list':
         start,end=d['period'] or (d['date'],d['date'])
@@ -153,6 +170,64 @@ def local_plan(text,now,state):
         return p
     return {'action':'clarify','question':'Что нужно сделать с планами? Можно создать задачу, встречу или напоминание, показать планы или найти запись. Например: «Напомни завтра в 10 позвонить Ивану».'}
 
+def _advice_request(text):
+    if re.match(r'^\s*как\s+(?:удал|созда|добав|измен|перенест|заверш|сохран)',text,re.I):return False
+    return bool(re.search(r'(?:помоги|помочь|как|посоветуй|предложи|разбей|с чего|что.*(?:первым|сначала))',text,re.I)
+                and re.search(r'план|день|недел|задач|начать|первым|сначала|разби[тт]|шаг',text,re.I))
+
+def _agenda(now):
+    rows,total=store.list_events(status='active',limit=40)
+    return {'today':now.date().isoformat(),'active_total':total,
+            'plans':[{k:e[k] for k in ('id','title','kind','date','time','duration')} for e in rows]}
+
+def _advice(now):
+    rows=_agenda(now)['plans'];day=now.date().isoformat()
+    dated=[e for e in rows if e['date']==day]
+    overdue=[e for e in rows if e['date'] and e['date']<day]
+    inbox=[e for e in rows if not e['date']]
+    if not rows:return 'Активных планов пока нет. Запиши одно важное дело на сегодня; я уточню детали и покажу их перед сохранением.'
+    parts=['Начни с одного результата, который важнее всего получить сегодня.']
+    if overdue:parts.append(f'Есть просроченные дела ({len(overdue)}): реши, что ещё актуально, и перенеси остальные.')
+    if dated:parts.append('Сегодня: '+'; '.join(label(e) for e in dated[:5])+'.')
+    if inbox:parts.append('Без даты: '+'; '.join('«'+e['title']+'»' for e in inbox[:3])+'.')
+    parts.append('Выбери одну задачу в «Фокус дня» и выдели на неё 25 минут. Между встречами оставь запас. Могу перенести конкретное дело или создать напоминание — назови его.')
+    return '\n\n'.join(parts)
+
+def dialog_preview(sid):
+    p=store.state(sid).get('confirmation',{})
+    if p.get('action')=='create':
+        return {'type':'event','title':p.get('title'),'kind':p.get('kind','task'),
+                'date':p.get('date'),'time':p.get('time'),'duration':p.get('duration',60),
+                'timezone':p.get('timezone'),'conflicts':p.get('_conflict_titles',[])}
+    if p.get('action')=='note_create':
+        return {'type':'note','title':p.get('title'),'body':p.get('body','')}
+    return None
+
+def _correct_draft(text,p,now):
+    """Edit a pending creation without sending confirmation flags through a model."""
+    text=re.sub(r'^не\s+.+?[,;]?\s+а\s+', '', text, flags=re.I)
+    s=unquoted(text).lower().replace('ё','е')
+    if re.match(r'^(?:не\b|нет\b|как\b|почему\b|зачем\b)',s):return None
+    updated=dict(p);changed=False
+    try:d=resolve(text,now)
+    except (ValueError,OverflowError):return None
+    for k in ('date','time'):
+        if d[k] is not None:updated[k]=d[k];changed=True
+    if d['period'] and not d['date']:updated['date']=None;updated['_needs_day']=True;updated['_period']=d['period'];changed=True
+    title=re.search(r'^(?:название|назови|переименуй(?:\s+в)?|измени название на)\s*[:—-]?\s*(.+)',text,re.I|re.S)
+    if title:updated['title']=title[1].strip(' «»"');changed=True
+    for word,kind in (('задач','task'),('напоминани','reminder'),('встреч','meeting')):
+        if re.search(r'^(?:это|сделай|тип|лучше|как)\b.*'+word,s):updated['kind']=kind;changed=True
+    if re.search(r'без даты|убери дату',s):updated['date']=updated['time']=None;updated['kind']='task';changed=True
+    elif re.search(r'без времени|убери время',s):updated['time']=None;changed=True
+    duration=re.search(r'(?:на|длительность)\s+(\d+)\s*(минут|час)',s)
+    if duration:updated['duration']=int(duration[1])*(60 if duration[2]=='час' else 1);changed=True
+    if not changed:return None
+    for k in list(updated):
+        if k.startswith('_') and k not in ('_needs_day','_period'):updated.pop(k)
+    if d['date']:updated.pop('_needs_day',None)
+    return updated
+
 def _model_plan(raw):
     """Defense at the executor boundary, including mocked/custom adapters."""
     if not isinstance(raw,dict) or not isinstance(raw.get('action'),str):raise ValueError('Некорректный план.')
@@ -169,6 +244,15 @@ def _make_plan(text,now,tz,st):
     s=unquoted(text).lower().replace('ё','е')
     conversational=_conversation(text,st)
     if conversational:return conversational,'local',None
+    if _intent(text) in ('note_create','note_search'):return local_plan(text,now,st),'local',None
+    if _advice_request(text):
+        if config.API_KEY and store.account()['use_ai']:
+            try:
+                store.reserve_ai_request()
+                p=_model_plan(ai.plan(text,now,tz,dict(st,agenda=_agenda(now))))
+                if p['action'] in ('reply','clarify'):return p,'llm',None
+            except Exception:pass
+        return {'action':'reply','reply':_advice(now)},'local',None
     if re.search(RECURRING,s):
         return {'action':'clarify','question':'Повторяющиеся события пока не поддерживаются. Можно создать одну запись на конкретную дату.'},'local',None
     # A new title must not accidentally reschedule an existing record.
@@ -253,7 +337,9 @@ def dialog_actions(sid):
     """Rebuild safe chat shortcuts from persisted, owner-scoped dialog state."""
     st,revision=store.state_snapshot(sid)
     if st.get('confirmation'):
-        actions=[{'label':'Подтвердить','text':'да'},{'label':'Отменить','text':'отмена'}]
+        creation=st['confirmation'].get('action') in ('create','note_create')
+        actions=[{'label':'Создать' if creation else 'Подтвердить','text':'да'},{'label':'Отменить','text':'отмена'}]
+        if st['confirmation'].get('action')=='create':actions.insert(1,{'label':'Изменить детали','text':'изменить детали'})
     elif st.get('choices'):
         actions=[{'label':'Выбрать #'+str(i),'text':'#'+str(i)} for i in st['choices']['ids']]+[{'label':'Отменить','text':'отмена'}]
     elif st.get('pending'):actions=[{'label':'Отменить','text':'отмена'}]
@@ -267,16 +353,30 @@ def chat(text,sid,tz='Europe/Moscow',now_value=None,prepared=None):
     store.message(sid,'user',text)
     def reply(msg,events=None,**extras):
         store.state(sid,st);store.message(sid,'assistant',msg)
-        return dict(reply=msg,events=events or [],actions=dialog_actions(sid),mode=mode,notice=notice,model=model,**extras)
+        return dict(reply=msg,events=events or [],actions=dialog_actions(sid),preview=dialog_preview(sid),mode=mode,notice=notice,model=model,**extras)
     if text.lower().strip(' .!') in ('отмена','отмени','нет','не надо'):
         st.pop('pending',None);st.pop('confirmation',None);st.pop('choices',None);st.pop('voice_text',None);st.pop('voice_nonce',None)
         return reply('Хорошо, действие отменено.')
     conversational=_conversation(text,st)
     if conversational:return reply(conversational['reply'])
     if st.get('confirmation'):
-        if text.lower().strip(' .!') not in ('да','подтверждаю','давай','удали','все равно добавь'):
+        draft=st['confirmation']
+        confirmed=text.lower().strip(' .!') in ('да','подтверждаю','давай','удали','все равно добавь','создать','сохрани','создавай')
+        if confirmed:
+            p=st.pop('confirmation')
+            if p.get('_expires',time.time()+1)<time.time():
+                p.pop('_confirmed',None);p.pop('_nonce',None);p.pop('_expires',None)
+                if p.get('action') not in ('create','note_create'):
+                    return reply('Подтверждение устарело. Повтори запрос, чтобы проверить актуальную запись.')
+        elif draft.get('action')=='create':
+            if text.lower().strip(' .!') in ('изменить детали','изменить','поправить'):
+                return reply('Напиши, что поправить: «завтра в 16», «название: Отчёт для команды», «это задача» или «на 30 минут». Ничего ещё не сохранено.')
+            p=_correct_draft(text,draft,now)
+            if p is None:
+                return reply('Запись ещё не создана. Подтверди кнопкой «Создать», уточни дату, время или название, либо отмени.')
+            st.pop('confirmation',None)
+        else:
             return reply('Ответь «да», чтобы подтвердить, или «отмена».')
-        p=st.pop('confirmation')
     elif st.get('choices') and re.fullmatch(r'\s*#?\d+\s*',text):
         i=int(text.strip().lstrip('#'))
         c=st['choices']
@@ -293,6 +393,18 @@ def chat(text,sid,tz='Europe/Moscow',now_value=None,prepared=None):
     if action=='clarify':return reply(str(p.get('question') or 'Уточни, что нужно сделать.')[:1000])
     if action=='reply':return reply(str(p.get('reply') or p.get('question') or 'Чем помочь с планами?')[:1000])
     st.pop('choices',None)
+    if action in ('note_create','note_search'):
+        from . import notes
+        if action=='note_search':
+            found=notes.listing(q=p.get('query',''))['notes'][:8]
+            return reply('Вот заметки.' if found else 'Подходящих заметок нет. Попробуй часть названия или #тег.',
+                         notes=[{'id':n['id'],'title':n['title'],'excerpt':n['excerpt']} for n in found])
+        if not p.get('_confirmed'):
+            p['_confirmed']=True;p['_expires']=time.time()+900;st['confirmation']=p;st.pop('pending',None)
+            return reply('Создать заметку «'+str(p.get('title',''))+'»?'+('\n\n'+p['body'][:500] if p.get('body') else '')+'\nОна появится на доске «Входящие».')
+        result,status=notes.save({k:p[k] for k in ('title','body') if k in p})
+        st.pop('pending',None)
+        return reply('Заметка сохранена: «'+result['note']['title']+'».',notes=[result['note']],changed=True)
     if action in ('list','search'):
         st.pop('pending',None)
         if action=='list':
@@ -345,12 +457,28 @@ def chat(text,sid,tz='Europe/Moscow',now_value=None,prepared=None):
         st['pending']=p
         return reply('Укажи конкретный день для записи. Название и остальные параметры сохранены; можно ответить коротко или написать «отмена».')
     p['timezone']=current['timezone'] if current else tz
-    try:e=validate(p,current)
+    try:e=validate(p,current,now_value=now.isoformat())
     except (ValueError,TypeError) as err:
         if action=='create' and not str(p.get('title') or '').strip():p['_field']='title'
+        # A failed validation invalidates the old approval, even if the next
+        # message supplies a valid replacement schedule.
+        for key in ('_confirmed','_nonce','_expires','_conflicts','_conflict_titles'):p.pop(key,None)
         st['pending']=p
         return reply(str(err)+' Можно ответить коротко или написать «отмена».')
     collisions=store.conflicts(e,current['id'] if current else None)
+    conflict_stamp=[[c['id'],c['revision']] for c in collisions]
+    acknowledged=p.get('_conflicts')==conflict_stamp
+    if action=='create' and (not p.get('_confirmed') or collisions and not acknowledged):
+        p={k:e[k] for k in ('title','kind','date','time','duration','status','timezone')}
+        p.update(action='create',_confirmed=True,_expires=time.time()+900,
+                 _conflicts=conflict_stamp,_conflict_titles=[c['title'] for c in collisions])
+        st['confirmation']=p;st.pop('pending',None)
+        kind={'task':'Задача','meeting':'Встреча','reminder':'Напоминание'}[e['kind']]
+        text=kind+': '+label(e)+'.'
+        if e['kind']=='meeting':text+=' Длительность: '+str(e['duration'])+' мин.'
+        text+='\nЧасовой пояс: '+e['timezone']+'.'
+        if collisions:text+='\nЕсть пересечение: '+'; '.join('«'+c['title']+'»' for c in collisions)+'.'
+        return reply(text+'\n\nВсё верно? Нажми «Создать» или напиши, что поправить.')
     if collisions and not p.get('_confirmed'):
         p['_confirmed']=True;st['confirmation']=p;st.pop('pending',None)
         return reply('В это время есть пересечение с другой встречей. Всё равно сохранить? Ответь «да» или «отмена».',collisions)
@@ -360,6 +488,6 @@ def chat(text,sid,tz='Europe/Moscow',now_value=None,prepared=None):
     if e.get('date') and datetime.fromisoformat(e['date']+'T'+(e.get('time') or '23:59')).replace(tzinfo=ZoneInfo(e['timezone']))<now:msg+=' Обрати внимание: дата или время уже в прошлом.'
     if e['kind']=='reminder':
         from .notifications import health
-        if owner().startswith('tg:') and store.account()['chat_id'] and store.account()['notify'] and health():msg+=' Доставка в Telegram включена. Для отправки бот должен работать.'
+        if store.account()['chat_id'] and store.account()['notify'] and health():msg+=' Доставка в Telegram включена.'
         else:msg+=' Для уведомления подключи Telegram в настройках. В браузере push-уведомлений нет.'
     return reply(msg,[saved],changed=True)

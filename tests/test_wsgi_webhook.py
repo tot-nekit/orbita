@@ -99,15 +99,27 @@ class ManagedHosting(unittest.TestCase):
         self.assertEqual(self.req('/api/telegram/webhook',update,secret=SECRET)[0],200)
         self.assertEqual(webhooks.drain(client),0)
         with store.connect() as db:
-            self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0],1)
+            self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0],0)
             self.assertEqual(db.execute('SELECT status,payload FROM telegram_inbox').fetchone()[:],('done','{}'))
+        with scope('tg:101'):
+            self.assertEqual(service.dialog_preview('telegram-conversation')['type'],'event')
+            self.assertEqual([a['text'] for a in service.dialog_actions('telegram-conversation')],['да','изменить детали','отмена'])
+        confirmation=self.update(2,text='да')
+        self.assertEqual(self.req('/api/telegram/webhook',confirmation,secret=SECRET)[0],200)
+        self.assertEqual(webhooks.drain(client),1)
+        self.assertEqual(self.req('/api/telegram/webhook',confirmation,secret=SECRET)[0],200)
+        self.assertEqual(webhooks.drain(client),0);self.assertEqual(len(client.sent),2)
+        with store.connect() as db:self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0],1)
 
     def test_retry_uses_receipt_without_creating_a_second_event(self):
         webhooks.receive(self.update(),SECRET)
+        self.assertEqual(webhooks.drain(FakeTelegram()),1)
+        with store.connect() as db:self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0],0)
+        webhooks.receive(self.update(2,text='да'),SECRET)
         client=FakeTelegram(fail=True);webhooks.drain(client)
         with store.connect() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0],1)
-            self.assertEqual(db.execute('SELECT status FROM telegram_inbox').fetchone()[0],'retry')
+            self.assertEqual(db.execute('SELECT status FROM telegram_inbox WHERE id=2').fetchone()[0],'retry')
             db.execute('UPDATE telegram_inbox SET next_try=0')
         client.fail=False;webhooks.drain(client)
         self.assertEqual(len(client.sent),1)
@@ -122,6 +134,9 @@ class ManagedHosting(unittest.TestCase):
     def test_stale_worker_cannot_send_after_another_worker_finished(self):
         import app.telegram_bot as bot
         webhooks.receive(self.update(),SECRET)
+        self.assertEqual(webhooks.drain(FakeTelegram()),1)
+        with store.connect() as db:self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0],0)
+        webhooks.receive(self.update(2,text='да'),SECRET)
         started=threading.Event();release=threading.Event();original=bot.handle;count=0
         def delayed(update,client):
             nonlocal count

@@ -183,17 +183,106 @@ def delete_account(data):
         row = db.execute('SELECT password_hash FROM users WHERE owner=?', (owner(),)).fetchone()
     if not row or data.get('confirmed') is not True or not check_password(data.get('password'), row[0]):
         raise AuthError('Подтверди удаление и введи свой пароль.', 401)
+    telegram_schema()
     with store.atomic(), store.connect() as db:
         if not db.execute('SELECT 1 FROM users WHERE owner=? AND password_hash=?', (owner(), row[0])).fetchone():
             raise AuthError('Пароль изменился. Войди снова.', 401)
+        linked = db.execute('SELECT telegram_owner FROM telegram_links WHERE user_owner=?', (owner(),)).fetchone()
+        if linked:
+            _revoke_telegram(db, linked[0], owner())
         # Conversation IDs are scoped with an exact prefix, not a user-built LIKE.
         prefix = owner() + ':'
         for table, field in [('messages', 'session'), ('sessions', 'id')]:
             db.execute(f'DELETE FROM {table} WHERE substr({field},1,?)=?', (len(prefix), prefix))
-        for table in ('events', 'notifications', 'receipts', 'link_codes', 'accounts', 'auth_sessions', 'ai_usage', 'telegram_inbox', 'users'):
+        for table in ('events', 'notifications', 'receipts', 'link_codes', 'accounts', 'auth_sessions', 'ai_usage', 'telegram_inbox', 'daily_focus', 'notes', 'note_events', 'note_boards', 'users'):
             db.execute(f'DELETE FROM {table} WHERE owner=?', (owner(),))
         db.execute('DELETE FROM telegram_links WHERE user_owner=?', (owner(),))
     return {'ok': True}
+
+
+def telegram_schema():
+    """Idempotent compatibility migration; call from store.init when integrated."""
+    with store.connect() as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS telegram_identities(
+            telegram_owner TEXT PRIMARY KEY, username TEXT, display_name TEXT,
+            epoch INTEGER NOT NULL DEFAULT 0, verified_at TEXT,
+            revoked_before INTEGER NOT NULL DEFAULT 0)""")
+        columns = {row['name'] for row in db.execute('PRAGMA table_info(telegram_identities)')}
+        if 'revoked_before' not in columns:
+            db.execute('ALTER TABLE telegram_identities ADD COLUMN revoked_before INTEGER NOT NULL DEFAULT 0')
+
+
+def telegram_epoch(telegram_owner):
+    telegram_schema()
+    with store.connect() as db:
+        row = db.execute('SELECT epoch FROM telegram_identities WHERE telegram_owner=?', (telegram_owner,)).fetchone()
+    return row[0] if row else 0
+
+
+def telegram_revoked_before(telegram_owner):
+    telegram_schema()
+    with store.connect() as db:
+        row = db.execute('SELECT revoked_before FROM telegram_identities WHERE telegram_owner=?', (telegram_owner,)).fetchone()
+    return row[0] if row else 0
+
+
+def record_telegram_identity(verified_user):
+    """Only call after Telegram HMAC verification or an authenticated bot update."""
+    uid = verified_user.get('id')
+    if type(uid) is not int or not 0 < uid < 10**20:
+        raise ValueError('Некорректный Telegram ID.')
+    name = verified_user.get('username')
+    name = name if isinstance(name, str) and re.fullmatch(r'[A-Za-z0-9_]{1,32}', name) else None
+    display = ' '.join(v.strip() for k in ('first_name', 'last_name')
+                       if isinstance((v := verified_user.get(k)), str))[:200] or None
+    telegram_schema()
+    with store.connect() as db:
+        db.execute("""INSERT INTO telegram_identities(telegram_owner,username,display_name,verified_at)
+            VALUES(?,?,?,?) ON CONFLICT(telegram_owner) DO UPDATE SET
+            username=excluded.username,display_name=excluded.display_name,verified_at=excluded.verified_at""",
+            ('tg:' + str(uid), name, display, store.utcnow()))
+
+
+def telegram_status():
+    """Public account-scoped metadata, never a token or link code."""
+    telegram_schema()
+    with store.connect() as db:
+        link = db.execute('SELECT telegram_owner FROM telegram_links WHERE user_owner=?', (owner(),)).fetchone()
+        target = link[0] if link else owner() if owner().startswith('tg:') else None
+        row = db.execute('SELECT username,display_name,verified_at FROM telegram_identities WHERE telegram_owner=?', (target,)).fetchone() if target else None
+    return {'linked': bool(link), 'id': target[3:] if target else None,
+            'username': row['username'] if row else None,
+            'display_name': row['display_name'] if row else None,
+            'verified_at': row['verified_at'] if row else None,
+            'can_unlink': bool(link and user())}
+
+
+def _revoke_telegram(db, target, account_owner):
+    db.execute("""INSERT INTO telegram_identities(telegram_owner,epoch,revoked_before) VALUES(?,1,?)
+        ON CONFLICT(telegram_owner) DO UPDATE SET epoch=epoch+1,revoked_before=MAX(revoked_before,excluded.revoked_before)""", (target, int(time.time())))
+    db.execute('DELETE FROM link_codes WHERE owner IN (?,?)', (target, account_owner))
+
+
+def unlink_telegram(data):
+    """Keep all records with the web account; revoke Telegram access, not logout."""
+    telegram_schema()
+    with store.connect() as db:
+        row = db.execute('SELECT password_hash FROM users WHERE owner=?', (owner(),)).fetchone()
+    if data.get('confirmed') is not True or not row or not check_password(data.get('password'), row[0]):
+        raise AuthError('Подтверди отключение Telegram и введи текущий пароль.', 401)
+    with store.atomic(), store.connect() as db:
+        if not db.execute('SELECT 1 FROM users WHERE owner=? AND password_hash=?', (owner(), row[0])).fetchone():
+            raise AuthError('Пароль изменился. Войди снова.', 401)
+        link = db.execute('SELECT telegram_owner FROM telegram_links WHERE user_owner=?', (owner(),)).fetchone()
+        if not link:
+            raise AuthError('Telegram уже отключён.', 409)
+        _revoke_telegram(db, link[0], owner())
+        db.execute('DELETE FROM telegram_links WHERE user_owner=?', (owner(),))
+        db.execute('UPDATE accounts SET chat_id=NULL WHERE owner=?', (owner(),))
+        # Retried old bot updates must not run against a subsequently relinked account.
+        db.execute('DELETE FROM telegram_inbox WHERE owner=?', (owner(),))
+        db.execute("UPDATE notifications SET status='cancelled',lease_token=NULL,lease_until=0 WHERE owner=? AND status IN ('pending','retry','sending')", (owner(),))
+    return {'ok': True, 'reload': True}
 
 
 def resolve_telegram(telegram_owner):
@@ -205,21 +294,33 @@ def resolve_telegram(telegram_owner):
 def link_telegram(code):
     if not user():
         raise AuthError('Привязка доступна зарегистрированному аккаунту.', 403)
+    telegram_schema()
     with store.atomic(), store.connect() as db:
         target = security.claim_link(code)
-        if target == owner():
-            return
         if not re.fullmatch(r'tg:[1-9][0-9]{0,19}', target):
             raise AuthError('Этот Telegram уже связан с другим аккаунтом.', 409)
         if db.execute('SELECT 1 FROM telegram_links WHERE telegram_owner=? OR user_owner=?', (target, owner())).fetchone():
             raise AuthError('Telegram уже связан с аккаунтом.', 409)
+        if not security.allowed(target[3:]):
+            raise AuthError('Доступ этого Telegram к боту отключён.', 403)
+        _revoke_telegram(db, target, owner())
         old = db.execute('SELECT chat_id FROM accounts WHERE owner=?', (target,)).fetchone()
         db.execute('INSERT INTO telegram_links VALUES(?,?)', (target, owner()))
         # Preserve all existing Telegram events, including imported sample IDs.
-        db.execute('UPDATE events SET source_id=NULL WHERE owner=? AND source_id IN (SELECT source_id FROM events WHERE owner=?)', (target, owner()))
+        collisions = db.execute('SELECT id FROM events WHERE owner=? AND source_id IN (SELECT source_id FROM events WHERE owner=?)', (target, owner())).fetchall()
+        smallest = db.execute('SELECT MIN(source_id) FROM events WHERE owner IN (?,?)', (target, owner())).fetchone()[0]
+        next_source = min(0, smallest or 0) - 1
+        for collision in collisions:
+            db.execute('UPDATE events SET source_id=? WHERE id=?', (next_source, collision[0]))
+            next_source -= 1
         db.execute('UPDATE events SET owner=? WHERE owner=?', (owner(), target))
         db.execute('UPDATE notifications SET owner=? WHERE owner=?', (owner(), target))
         db.execute('UPDATE telegram_inbox SET owner=? WHERE owner=?', (owner(), target))
+        # Notes travel with the Telegram space; boards with the same name merge.
+        db.execute('UPDATE notes SET owner=? WHERE owner=?', (owner(), target))
+        db.execute('UPDATE note_events SET owner=? WHERE owner=?', (owner(), target))
+        db.execute('INSERT OR IGNORE INTO note_boards(owner,name,position,created_at) SELECT ?,name,position+100,created_at FROM note_boards WHERE owner=?', (owner(), target))
+        db.execute('DELETE FROM note_boards WHERE owner=?', (target,))
         for row in db.execute('SELECT id FROM sessions WHERE substr(id,1,?)=?', (len(target)+1, target+':')).fetchall():
             old_sid = row[0]
             new_sid = owner() + old_sid[len(target):]
@@ -231,3 +332,5 @@ def link_telegram(code):
             store.account({'chat_id': old['chat_id']})
         db.execute('DELETE FROM accounts WHERE owner=?', (target,))
         db.execute('DELETE FROM receipts WHERE owner=?', (target,))
+        # A focus chosen in the old Telegram space would point at moved records.
+        db.execute('DELETE FROM daily_focus WHERE owner=?', (target,))

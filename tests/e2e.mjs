@@ -6,6 +6,12 @@ const server=await startServer();
 const page=await browser.newPage({viewport:{width:1440,height:1100}});await localOnly(page.context(),server.base);const errors=[];page.on('pageerror',e=>errors.push(e.message));
 page.setDefaultTimeout(15000);page.setDefaultNavigationTimeout(15000);
 const title='UI-smoke-'+Date.now();
+async function openAssistant(){
+ if(await page.locator('#assistant-fab').isVisible()){
+  if(!await page.locator('#assistant-dock').isVisible())await page.click('#assistant-fab');
+  await page.locator('#assistant-dock #chat-form').waitFor();
+ }else{await page.click('[data-view="assistant"]');await page.locator('#view-assistant #chat-form').waitFor();}
+}
 async function bucketRegression(){
  const post=async(path,data)=>{const r=await fetch(server.base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});assert.equal(r.status,200);return r.json();};
  await post('/api/account',{timezone:'UTC'});
@@ -37,29 +43,38 @@ async function modeAndVoiceRegression(){
  await page.reload();await page.locator('body:not(.booting):not(.locked)').waitFor();assert.match(await page.locator('#mode-label').textContent(),/Добавление и поиск/);assert.doesNotMatch(await page.locator('#connection').textContent(),/подключена/);
  linked=true;await page.reload();await page.locator('body:not(.booting):not(.locked)').waitFor();await page.click('[data-view="settings"]');await page.locator('#logout').waitFor();assert.equal((await page.locator('#logout').textContent()).trim(),'Отвязать Telegram от сайта');await page.click('#logout');await page.click('#confirm-no');assert.equal(await page.locator('#logout').isVisible(),true);
  await page.route('**/api/logout',route=>{linked=false;return route.fulfill({json:{ok:true}});});await page.click('#logout');await Promise.all([page.waitForNavigation(),page.click('#confirm-yes')]);await page.locator('body:not(.booting):not(.locked)').waitFor();await page.click('[data-view="settings"]');assert.equal(await page.locator('#logout').isVisible(),false);await page.click('[data-view="assistant"]');
- await page.click('#mic');assert.match(await page.locator('#voice-status').textContent(),/не включено/);assert.equal(await page.evaluate(()=>window.__micRequests),0);assert.equal(transcriptions,0);
+ await openAssistant();await page.click('#mic');await page.locator('#toast-text').filter({hasText:'не включено'}).waitFor();assert.match(await page.locator('#voice-status').textContent(),/не включено/);assert.equal(await page.evaluate(()=>window.__micRequests),0);assert.equal(transcriptions,0);
  await page.route('**/api/chat',route=>route.fulfill({json:{reply:'Тестовый локальный ответ',events:[],mode:'local',notice:'Провайдер временно недоступен',changed:false}}));
  await page.fill('#prompt','проверка fallback');await page.click('#send');await page.locator('#mode-label').filter({hasText:'Доступны простые команды'}).waitFor();assert.match(await page.locator('#chat-notice').textContent(),/простые команды/);
  await page.route('**/api/chat',route=>route.fulfill({json:{reply:'Тестовый ответ модели',events:[],mode:'llm',model:'test-fallback-model',notice:'Запрос обработан резервной моделью: test-fallback-model.',changed:false}}));
- await page.locator('#send').waitFor({state:'visible'});await page.fill('#prompt','проверка модели');await page.click('#send');await page.locator('#mode-label').filter({hasText:'Можно добавить ещё запись'}).waitFor();assert.match(await page.locator('#chat-notice').textContent(),/Подробности/);assert.doesNotMatch(await page.locator('#mode-label').textContent(),/LLM|test-fallback-model/);assert.match(await page.locator('#ai-details').textContent(),/test-fallback-model/);
+ await page.locator('#send').waitFor({state:'visible'});await page.fill('#prompt','проверка модели');await page.click('#send');await page.locator('#mode-label').filter({hasText:'Можно добавить ещё запись'}).waitFor();assert.equal(await page.locator('#chat-notice').isVisible(),false);assert.doesNotMatch(await page.locator('#mode-label').textContent(),/LLM|test-fallback-model/);assert.doesNotMatch(await page.locator('#ai-details').textContent(),/LLM|test-fallback-model/);
  await page.route('**/api/config',async route=>{const r=await route.fetch();const c=await r.json();await route.fulfill({json:{...c,llm:true,model:'test-model',stt:true}});});
- await page.reload();await page.locator('body:not(.booting):not(.locked)').waitFor();await page.click('#mic');assert.match(await page.locator('#voice-status').textContent(),/Разреши доступ/);assert.equal(await page.locator('#mic').isEnabled(),true);assert.equal(transcriptions,0);
+ await page.reload();await page.locator('body:not(.booting):not(.locked)').waitFor();await openAssistant();await page.click('#mic');await page.locator('#toast-text').filter({hasText:'Разреши доступ'}).waitFor();assert.match(await page.locator('#voice-status').textContent(),/Разреши доступ/);assert.equal(await page.locator('#mic').isEnabled(),true);assert.equal(transcriptions,0);
  await page.evaluate(()=>{window.__stopped=false;navigator.mediaDevices.getUserMedia=async()=>({getTracks:()=>[{stop(){window.__stopped=true;}}]});window.MediaRecorder=class{static isTypeSupported(){return true;}constructor(){this.state='inactive';}start(){this.state='recording';}stop(){this.state='inactive';this.ondataavailable({data:new Blob(['fake-audio'])});this.onstop();}};});
- await page.click('#mic');await page.locator('#mic.recording').waitFor();await page.click('#mic');try{await page.locator('#voice-status').filter({hasText:'Тест: STT недоступно'}).waitFor();}catch{throw new Error('STT regression: '+await page.locator('#voice-status').textContent()+'; calls='+transcriptions);}assert.equal(transcriptions,1);assert.equal(await page.evaluate(()=>window.__stopped),true);assert.equal(await page.locator('#mic').isEnabled(),true);assert.equal(await page.locator('#prompt').inputValue(),'');
+ await page.click('#mic');await page.locator('#mic.recording').waitFor();await page.click('#mic');try{await page.locator('#toast-text').filter({hasText:'Тест: STT недоступно'}).waitFor();}catch{throw new Error('STT regression: '+await page.locator('#voice-status').textContent()+'; calls='+transcriptions);}assert.match(await page.locator('#voice-status').textContent(),/Тест: STT недоступно/);assert.equal(transcriptions,1);assert.equal(await page.evaluate(()=>window.__stopped),true);assert.equal(await page.locator('#mic').isEnabled(),true);assert.equal(await page.locator('#prompt').inputValue(),'');
 }
 try{
  await page.goto(server.base);await page.locator('body:not(.booting):not(.locked)').waitFor();
- await page.click('[data-view="settings"]');assert.equal(await page.locator('#logout').isVisible(),false,'unlinked web has no unlink action');assert.equal(await page.locator('#import-data').isVisible(),false,'demo import requires disclosure');await page.locator('#demo-data summary').click();assert.equal(await page.locator('#import-data').isVisible(),true);await page.click('[data-view="assistant"]');
+ await page.click('[data-view="settings"]');assert.equal(await page.locator('#logout').isVisible(),false,'unlinked web has no unlink action');assert.equal(await page.locator('#import-data').count(),0,'demo import removed');await page.click('[data-view="assistant"]');
  await bucketRegression();
- await page.fill('#prompt','Добавь задачу сегодня '+title);await page.click('#send');await page.locator('.message.assistant').filter({hasText:'Сохранено:'}).waitFor();
- await page.click('[data-view="planner"]');const record=page.locator('.record').filter({hasText:title});await record.waitFor();
+ assert.equal(await page.locator('#nav-home-label').textContent(),'Сегодня');assert.equal(await page.locator('#chat-form').isVisible(),false,'desktop home is a dashboard');
+ await openAssistant();
+ const draftResponse=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/chat'&&r.request().method()==='POST');
+ await page.fill('#prompt','Добавь задачу сегодня '+title);await page.click('#send');
+ const draft=await(await draftResponse).json();assert.deepEqual(draft.events,[],'no events returned before approval');assert.ok(!draft.changed,'draft must not mutate records');assert.equal(draft.preview.type,'event');assert.equal(draft.preview.title,title);
+ await page.locator('.chat-preview').filter({hasText:title}).waitFor();assert.equal((await(await fetch(server.base+'/api/events')).json()).total,0,'no saved events before approval');
+ const approval=page.waitForRequest(r=>new URL(r.url()).pathname==='/api/chat'&&r.method()==='POST');
+ await page.locator('.chat-actions').getByRole('button',{name:'Создать',exact:true}).click();assert.equal((await approval).postDataJSON().text,'да');await page.locator('.message.assistant').filter({hasText:'Сохранено:'}).waitFor();
+ await page.click('#dock-close');await page.locator('#assistant-dock').waitFor({state:'hidden'});assert.equal(await page.locator('#assistant-fab').getAttribute('aria-expanded'),'false');
+ await page.click('[data-view="planner"]');const record=page.locator('#planner-list .record').filter({hasText:title});await record.waitFor();
  await record.getByRole('button',{name:'Изменить'}).click();await page.fill('#event-title',title+'-edited');await page.click('#event-save');await page.locator('#event-dialog').waitFor({state:'hidden'});
- await page.click('[data-view="archive"]');await page.fill('#search',title+'-edited');await page.click('#search-form button');await page.locator('#search-list .record').waitFor();
- await page.locator('#search-list .record').getByRole('button',{name:'Удалить'}).click();await page.click('#confirm-yes');await page.locator('#search-list .empty-state').waitFor();
- await page.click('#toast-action');await page.locator('#search-list .record').waitFor();
- await page.locator('#search-list .record').getByRole('button',{name:'Удалить'}).click();await page.click('#confirm-yes');await page.locator('#search-list .empty-state').waitFor();
+ const searchResponse=page.waitForResponse(r=>{const u=new URL(r.url());return u.pathname==='/api/events'&&u.searchParams.get('q')===title+'-edited';});
+ await page.fill('#search',title+'-edited');assert.equal((await searchResponse).status(),200);await page.locator('#planner-count').filter({hasText:'По запросу «'+title+'-edited»: 1'}).waitFor();await record.waitFor();
+ await record.getByRole('button',{name:'Удалить'}).click();await page.click('#confirm-yes');await page.locator('#planner-list .empty-state').waitFor();
+ await page.click('#toast-action');await record.waitFor();
+ await record.getByRole('button',{name:'Удалить'}).click();await page.click('#confirm-yes');await page.locator('#planner-list .empty-state').waitFor();
  await page.setViewportSize({width:390,height:844});
- for(const name of ['assistant','planner','archive','settings']){await page.click('[data-view="'+name+'"]');if(name==='assistant'){const composer=await page.locator('#chat-form').boundingBox(),nav=await page.locator('.sidebar nav').boundingBox();assert.ok(composer.y+composer.height<=nav.y,'mobile composer above navigation');}assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow: '+name);}
+ for(const name of ['assistant','planner','notes','settings']){await page.click('[data-view="'+name+'"]');if(name==='assistant'){await page.locator('#view-assistant #chat-form').waitFor();assert.equal(await page.locator('#assistant-fab').isVisible(),false);const composer=await page.locator('#chat-form').boundingBox(),nav=await page.locator('.sidebar nav').boundingBox();assert.ok(composer.y+composer.height<=nav.y,'mobile composer above navigation');}assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow: '+name);}
  await page.click('#global-add');await page.fill('#event-title','Проверка формы');await page.selectOption('#event-kind','meeting');await page.click('#event-save');assert.ok(await page.locator('#event-dialog').isVisible(),'incomplete meeting must not save');await page.click('#dialog-cancel');
  await page.click('#theme');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
  await modeAndVoiceRegression();

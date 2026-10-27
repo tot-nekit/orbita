@@ -15,7 +15,7 @@ try{
  assert.equal(await page.locator('html').getAttribute('data-theme'),'light','clean light default even with dark OS');
  // Preserve pending actions after reload, submit their revision and prevent double sends.
  await page.route('**/api/history?*',r=>r.fulfill({json:{messages:[{role:'assistant',text:'Удалить запись?'}],actions:[{label:'Да, удалить',text:'Да',revision:7}]}}));
- await page.reload();await ready();await page.getByRole('button',{name:'Да, удалить'}).waitFor();
+ await page.reload();await ready();assert.equal(await page.locator('#nav-home-label').textContent(),'Сегодня');assert.equal(await page.locator('#chat-form').isVisible(),false);await page.click('#assistant-fab');await page.locator('#assistant-dock').waitFor();await page.getByRole('button',{name:'Да, удалить'}).waitFor();
  let calls=[];let release;
  await page.route('**/api/chat',async r=>{calls.push(r.request().postDataJSON());if(calls.length===1)await new Promise(resolve=>{release=resolve;});await r.fulfill({json:{reply:'Действие уже изменилось. Подтверди актуальное.',code:'stale_dialog',actions:[{label:'Актуальное действие',text:'Подтверждаю',revision:8}],events:[],changed:false,mode:'local'}});});
  await page.getByRole('button',{name:'Да, удалить'}).click();
@@ -36,7 +36,7 @@ try{
  const next=new Date(`${zoneDay('year')}-${zoneDay('month')}-${zoneDay('day')}T12:00:00Z`);next.setUTCDate(next.getUTCDate()+1);const tomorrow=next.toISOString().slice(0,10);
  const event=(await post('/api/events/save',{title:'Tomorrow revision test',kind:'task',date:day,timezone:eventZone})).event;
  await page.reload();await ready();await page.click('[data-view=planner]');
- const record=page.locator('.record').filter({hasText:event.title});await record.waitFor();
+ const record=page.locator('#planner-list .record').filter({hasText:event.title});await record.waitFor();
  const saved=page.waitForRequest(r=>new URL(r.url()).pathname==='/api/events/save');
  await record.getByRole('button',{name:'На завтра',exact:true}).click();const payload=(await saved).postDataJSON();
  assert.equal(payload.revision,event.revision);assert.equal(payload.date,tomorrow);assert.equal(payload.timezone,eventZone);
@@ -53,7 +53,7 @@ try{
  await page.reload();await ready();await page.click('[data-view=planner]');await page.locator('.delivery-status').filter({hasText:'Запланировано'}).waitFor();
  const snooze=page.waitForRequest(r=>new URL(r.url()).pathname==='/api/events/snooze');await page.getByRole('button',{name:'Через 15 мин',exact:true}).click();assert.deepEqual((await snooze).postDataJSON(),{id:901,minutes:15,revision:4});
  status='demo';await page.click('[data-view=settings]');await page.locator('#notify-state').filter({hasText:'Учебная запись'}).waitFor();await page.click('[data-view=planner]');await page.locator('.delivery-status').filter({hasText:'Учебная запись · без уведомлений'}).waitFor();assert.equal(await page.locator('.delivery-status button').count(),0);
- for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:900});for(const view of ['assistant','planner','archive','settings']){await page.click(`[data-view=${view}]`);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`no overflow ${width}/${view}`);}}
+ for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:900});for(const view of ['assistant','planner','notes','settings']){await page.click(`[data-view=${view}]`);await page.locator(`#view-${view}`).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`no overflow ${width}/${view}`);if(width>760){assert.equal(await page.locator('#nav-home-label').textContent(),'Сегодня');if(!await page.locator('#assistant-dock').isVisible())await page.click('#assistant-fab');await page.locator('#assistant-dock #chat-form').waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`no dock overflow ${width}/${view}`);await page.click('#dock-close');}else if(view==='assistant'){await page.locator('#view-assistant #chat-form').waitFor();assert.equal(await page.locator('#assistant-fab').isVisible(),false);}}}
  // An expired linked cookie locks once and offers explicit recovery without redirect loops.
  await page.route('**/api/config',r=>r.fulfill({status:401,json:{code:'session_expired',error:'Привязка пространства истекла. Вернись к веб-записям и заново свяжи Telegram в настройках.'}}));
  await page.reload();await page.locator('body.locked').waitFor();assert.match(await page.locator('#access-link').textContent(),/Открыть веб-пространство/);

@@ -7,9 +7,11 @@ from unittest.mock import patch
 from app import store, service, notifications, security, telegram_bot, config
 from app.context import scope
 from app.server import Handler
+from fixture_clock import historical
 
 class DeliveryWorkflow(unittest.TestCase):
     def setUp(self):
+        clock=historical();clock.start();self.addCleanup(clock.stop)
         self.tmp=tempfile.TemporaryDirectory();self.db=patch.object(store,'DB_PATH',str(Path(self.tmp.name)/'data.db'));self.db.start()
         self.key=patch.object(config,'API_KEY','');self.key.start()
         self.env=patch.dict(os.environ,{'APP_SESSION_SECRET':'test-only-'+'x'*48,'TELEGRAM_ALLOW_PUBLIC':'1','TELEGRAM_ALLOWED_USER_IDS':''});self.env.start()

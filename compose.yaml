@@ -33,11 +33,19 @@ services:
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
       TELEGRAM_ALLOW_PUBLIC: ${TELEGRAM_ALLOW_PUBLIC:-0}
+      TELEGRAM_PROXY: ${TELEGRAM_PROXY:-}
+      TELEGRAM_BACKUP_CHAT_ID: ${TELEGRAM_BACKUP_CHAT_ID:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Set the public HTTPS origin}
     volumes:
       - orbita-data:/app/data
     restart: unless-stopped
     stop_grace_period: 20s
     pids_limit: 128
+    # Bounded container logs: a month of uptime must not fill the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 volumes:
   orbita-data:

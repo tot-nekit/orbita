@@ -19,7 +19,11 @@ def secret():
     return path.read_bytes()
 def b64(data):return base64.urlsafe_b64encode(data).decode().rstrip('=')
 def issue(owner_id,ttl=43200):
-    body=b64(json.dumps({'owner':owner_id,'exp':int(time.time())+ttl},separators=(',',':')).encode())
+    data={'owner':owner_id,'exp':int(time.time())+ttl}
+    if owner_id.startswith('tg:'):
+        from . import auth
+        data['epoch']=auth.telegram_epoch(owner_id)
+    body=b64(json.dumps(data,separators=(',',':')).encode())
     return body+'.'+b64(hmac.new(secret(),body.encode(),hashlib.sha256).digest())
 def verify(token):
     try:
@@ -31,6 +35,8 @@ def verify(token):
         if data['owner']=='web' and auth.required():raise ValueError()
         if data['owner'].startswith('tg:'):
             if not allowed(data['owner'][3:]):raise ValueError()
+            epoch=data.get('epoch',0)
+            if type(epoch) is not int or epoch!=auth.telegram_epoch(data['owner']):raise ValueError()
             return auth.resolve_telegram(data['owner'])
         return data['owner']
     except Exception:raise ValueError('Сессия истекла или недействительна. Открой приложение заново.') from None
@@ -58,11 +64,19 @@ def telegram_user(raw,bot_token=None,now=None):
         if type(uid) is not int or uid<=0 or uid>10**20:raise ValueError()
     except Exception:raise ValueError('Данные Telegram устарели или не содержат пользователя.') from None
     if not allowed(uid):raise ValueError('Доступ ограничен. Владелец должен разрешить твой Telegram ID.')
+    from . import auth
+    if stamp<=auth.telegram_revoked_before('tg:'+str(uid)):
+        raise ValueError('Подключение Telegram изменилось. Закрой Mini App и открой его заново.')
+    auth.record_telegram_identity(user)
     return user
 
 def make_link():
+    from . import auth
+    if not re.fullmatch(r'tg:[1-9][0-9]{0,19}',owner()):
+        raise ValueError('Этот Telegram уже связан. Управляй подключением в настройках аккаунта.')
     code=secrets.token_hex(5).upper();hashed=hashlib.sha256(code.encode()).hexdigest()
-    with store.connect() as db:
+    with store.atomic(),store.connect() as db:
+        if auth.resolve_telegram(owner())!=owner():raise ValueError('Этот Telegram уже связан с аккаунтом.')
         db.execute('DELETE FROM link_codes WHERE owner=? OR expires<?',(owner(),time.time()))
         db.execute('INSERT INTO link_codes VALUES(?,?,?)',(hashed,owner(),time.time()+600))
     return code

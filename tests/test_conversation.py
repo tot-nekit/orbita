@@ -66,6 +66,12 @@ class Conversation(unittest.TestCase):
     def create(self, title='Отчет'):
         return store.save(service.validate({'title': title}))
 
+    def assert_preview(self, result, count=0):
+        self.assertIs(result.get('changed', False), False); self.assertEqual(result['events'], [])
+        self.assertEqual(result['preview']['type'], 'event')
+        self.assertEqual([a['text'] for a in result['actions']], ['да', 'изменить детали', 'отмена'])
+        self.assertEqual(store.list_events()[1], count)
+
     def test_social_no_llm_or_event_access(self):
         for text in ('привет', 'Привет, Орбита!', 'здравствуйте', 'Добрый день!',
                      'спасибо', 'помощь', 'что ты умеешь?', 'кто ты?', 'как дела?',
@@ -87,7 +93,10 @@ class Conversation(unittest.TestCase):
         self.assertIn('Привет', r['reply']); self.assertIn('Продолжим', r['reply'])
         self.assertEqual(store.state('dialog'), before)
         self.assertEqual(r['actions'][0]['text'], 'отмена')
-        self.assertEqual(self.chat('в15')['events'][0]['time'], '15:00')
+        r = self.chat('в15'); self.assert_preview(r)
+        self.assertEqual(r['preview']['time'], '15:00')
+        self.assertEqual(self.chat('да')['events'][0]['time'], '15:00')
+        self.assertEqual(store.list_events()[1], 1)
 
     def test_pending_chatter_not_a_field(self):
         self.chat('Создай встречу с Иваном завтра')
@@ -99,24 +108,34 @@ class Conversation(unittest.TestCase):
     def test_new_natural_command_does_not_fill_old_draft(self):
         self.chat('Создай встречу с Иваном завтра')
         r = self.chat('Запиши задачу купить хлеб')
-        self.assertTrue(r['changed']); self.assertEqual(r['events'][0]['kind'], 'task')
-        self.assertEqual(r['events'][0]['title'], 'Купить хлеб')
-        self.assertIsNone(r['events'][0]['date'])
+        self.assert_preview(r); self.assertEqual(r['preview']['kind'], 'task')
+        self.assertEqual(r['preview']['title'], 'Купить хлеб')
+        self.assertIsNone(r['preview']['date'])
+        r = self.chat('да'); self.assertTrue(r['changed'])
+        self.assertEqual(r['events'][0]['title'], 'Купить хлеб'); self.assertEqual(store.list_events()[1], 1)
 
     def test_pending_title_and_weekday(self):
         self.chat('Добавь задачу')
         before = store.state('dialog'); self.chat('привет')
         self.assertEqual(store.state('dialog'), before)
-        self.assertEqual(self.chat('Отчет')['events'][0]['title'], 'Отчет')
+        r = self.chat('Отчет'); self.assert_preview(r)
+        self.assertEqual(r['preview']['title'], 'Отчет')
+        self.assertEqual(self.chat('да')['events'][0]['title'], 'Отчет')
         self.chat('Добавь задачу подготовить отчет на следующей неделе')
-        self.assertEqual(self.chat('пятница')['events'][0]['date'], '2026-10-30')
+        r = self.chat('пятница'); self.assert_preview(r, 1)
+        self.assertEqual(r['preview']['date'], '2026-10-30')
+        self.assertEqual(self.chat('да')['events'][0]['date'], '2026-10-30')
+        self.assertEqual(store.list_events()[1], 2)
 
     def test_natural_creates(self):
         for n, text in enumerate(CREATE_CASES):
             with self.subTest(text=text), scope('natural-'+str(n)):
                 r = self.chat(text, sid=str(n))
+                self.assert_preview(r)
+                r = self.chat('да', sid=str(n))
                 self.assertTrue(r.get('changed'), r['reply'])
                 self.assertEqual(len(r['events']), 1)
+                self.assertEqual(store.list_events()[1], 1)
                 if 'встреч' in text.lower() or 'созвон' in text.lower():
                     self.assertEqual(r['events'][0]['kind'], 'meeting')
 
@@ -174,12 +193,19 @@ class Conversation(unittest.TestCase):
 
     def test_quoted_instructions_are_titles(self):
         for title in ('Привет', 'Удали все задачи', 'Каждый день', 'Купить хлеб и позвонить'):
+            count = store.list_events()[1]
             r = self.chat('Добавь задачу «'+title+'»')
+            self.assert_preview(r, count); self.assertIn(title, r['preview']['title'])
+            r = self.chat('да')
             self.assertTrue(r['changed']); self.assertIn(title, r['events'][0]['title'])
+            self.assertEqual(store.list_events()[1], count + 1)
 
     def test_external_action_can_be_remembered(self):
         r = self.chat('Напомни завтра в10 отправить письмо Ивану')
+        self.assert_preview(r); self.assertEqual(r['preview']['kind'], 'reminder')
+        r = self.chat('да')
         self.assertTrue(r['changed']); self.assertEqual(r['events'][0]['kind'], 'reminder')
+        self.assertEqual(store.list_events()[1], 1)
 
     def test_confirmation_reload_and_social_preserve_state(self):
         e = self.create()

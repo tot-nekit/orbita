@@ -56,6 +56,27 @@ class SupervisionRegression(unittest.TestCase):
             with self.assertRaises(OSError):run.supervise([('web',[],{}),('bot',[],{})],threading.Event())
         cleanup.assert_called_once_with([process])
 
+    def test_auxiliary_worker_restarts_alone_and_website_keeps_running(self):
+        import run
+        web=MagicMock(pid=990003);web.poll.return_value=None
+        bot=MagicMock(pid=990004);bot.poll.return_value=1
+        replacement=MagicMock(pid=990005);replacement.poll.return_value=None
+        stop=threading.Event();clock=[0.0];ticks=[]
+        def wait(_):
+            # Real supervisor polls every 0.25s: the restart must survive many polls.
+            clock[0]+=0.25;ticks.append(clock[0])
+            if clock[0]>8:stop.set()
+        with patch.object(run.subprocess,'Popen',side_effect=[web,bot,replacement]) as popen, \
+                patch.object(run.time,'monotonic',side_effect=lambda:clock[0]), \
+                patch.object(stop,'wait',side_effect=wait),patch.object(run,'stop_processes') as cleanup, \
+                patch('builtins.print') as printed:
+            self.assertEqual(run.supervise([('web',['w'],{}),('bot',['b'],{})],stop,restartable={'bot'}),0)
+        self.assertEqual(popen.call_count,3)
+        cleanup.assert_called_once_with([web,replacement])
+        messages=[c.args[0] for c in printed.call_args_list]
+        self.assertEqual(sum('restarting it' in m for m in messages),1)
+        self.assertIn('Restarted bot.',messages)
+
     def test_repeated_failed_http_health_stops_the_service(self):
         import run
         process=MagicMock();process.poll.return_value=None

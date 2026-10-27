@@ -83,6 +83,47 @@ def rotate_backups(keep=28):
             path.unlink()
 
 
+def newest_backup_age(now=None):
+    """Seconds since the newest automatic snapshot, or None when there is none."""
+    directory = backup_directory()
+    if not directory.is_dir():
+        return None
+    times = [p.stat().st_mtime for p in directory.iterdir()
+             if AUTO_BACKUP.fullmatch(p.name) and not p.is_symlink() and p.is_file()]
+    return max(0.0, (time.time() if now is None else now) - max(times)) if times else None
+
+
+def send_offsite(path, client=None, now=None):
+    """Daily encrypted off-VM copy to the owner's Telegram chat, when configured.
+
+    The snapshot is SQLCipher-encrypted with the server key, so the file alone is
+    unreadable. Failures never affect local backups and never print details."""
+    chat = os.getenv("TELEGRAM_BACKUP_CHAT_ID", "").strip()
+    if not chat or not os.getenv("TELEGRAM_BOT_TOKEN") or not database.encryption_enabled():
+        return False
+    if not re.fullmatch(r"[1-9][0-9]{0,19}", chat):
+        print("Off-site backup skipped: invalid TELEGRAM_BACKUP_CHAT_ID.", flush=True)
+        return False
+    stamp = backup_directory() / ".offsite-sent"
+    current = time.time() if now is None else now
+    if stamp.exists() and current - stamp.stat().st_mtime < 23 * 3600:
+        return False
+    try:
+        if client is None:
+            from app.telegram_bot import Telegram
+            client = Telegram()
+        client.document(int(chat), Path(path).read_bytes(), filename=Path(path).name,
+                        mime="application/octet-stream",
+                        caption="Орбита: зашифрованная резервная копия базы")
+    except Exception as exc:
+        print("Off-site backup failed (" + type(exc).__name__ + "); next attempt after the next backup.", flush=True)
+        return False
+    stamp.touch()
+    os.utime(stamp, (current, current))
+    print("Off-site encrypted backup sent to Telegram.", flush=True)
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="Проверенная резервная копия без остановки сервера")
     parser.add_argument("--output", type=Path, help="Новый файл; существующий путь не заменяется")

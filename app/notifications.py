@@ -28,17 +28,24 @@ def tick(client,now=None,max_messages=None,deadline=None):
             r=dict(row)
             lease=secrets.token_hex(16)
             db.execute("UPDATE notifications SET status='sending',lease_until=?,lease_token=? WHERE event_id=? AND due=?",(stamp+90,lease,r['event_id'],r['due']))
-        with scope(r['owner']):
-            e=store.get_event(r['event_id']);acc=store.account()
-            valid=e and e['status']=='active' and e['kind']=='reminder' and acc['notify'] and acc['chat_id'] and due_at(e).isoformat()==r['due']
-            if not valid:status='cancelled';error=None
-            elif (now-datetime.fromisoformat(r['due'])).total_seconds()>3600:status='missed';error=None
-            else:
-                try:
-                    client.call('sendMessage',{'chat_id':acc['chat_id'],'text':f'🔔 {e["title"]}\n{e["date"]} · {e["time"]} · {e["timezone"]}','reply_markup':{'inline_keyboard':[[{'text':'✓ Выполнено','callback_data':f'done:{e["id"]}:{e["revision"]}'}],[{'text':'Через 15 минут','callback_data':f'snooze:{e["id"]}:{e["revision"]}:15'},{'text':'Через час','callback_data':f'snooze:{e["id"]}:{e["revision"]}:60'}]]}})
-                    status='sent';error=None;sent+=1
-                except Exception:status='failed' if r['attempts']>=4 else 'retry';error='Telegram delivery failed; no credentials logged'
-        with store.connect() as db:
+        # Serialize the final lease/account check and bounded network send with
+        # unlink/delete. A committed revocation always wins over stale workers.
+        with scope('web'),store.atomic(),store.connect() as db:
+            owned=db.execute("SELECT 1 FROM notifications WHERE event_id=? AND due=? AND owner=? AND lease_token=? AND status='sending' AND lease_until>?",(r['event_id'],r['due'],r['owner'],lease,stamp)).fetchone()
+            if not owned:continue
+            with scope(r['owner']):
+                from . import auth
+                e=store.get_event(r['event_id']);acc=store.account() if e else None
+                valid=e and e['source_id'] is None and e['status']=='active' and e['kind']=='reminder' and acc['notify'] and acc['chat_id'] and due_at(e).isoformat()==r['due']
+                if valid and r['owner'].startswith('u:'):
+                    valid=auth.resolve_telegram('tg:'+str(acc['chat_id']))==r['owner'] and auth.user() is not None
+                if not valid:status='cancelled';error=None
+                elif (now-datetime.fromisoformat(r['due'])).total_seconds()>3600:status='missed';error=None
+                else:
+                    try:
+                        client.call('sendMessage',{'chat_id':acc['chat_id'],'text':f'🔔 {e["title"]}\n{e["date"]} · {e["time"]} · {e["timezone"]}','reply_markup':{'inline_keyboard':[[{'text':'✓ Выполнено','callback_data':f'done:{e["id"]}:{e["revision"]}'}],[{'text':'Через 15 минут','callback_data':f'snooze:{e["id"]}:{e["revision"]}:15'},{'text':'Через час','callback_data':f'snooze:{e["id"]}:{e["revision"]}:60'}]]}},timeout=15)
+                        status='sent';error=None;sent+=1
+                    except Exception:status='failed' if r['attempts']>=4 else 'retry';error='Telegram delivery failed; no credentials logged'
             db.execute('UPDATE notifications SET status=?,attempts=attempts+1,next_try=?,lease_until=0,last_error=?,lease_token=NULL WHERE event_id=? AND due=? AND lease_token=?',(status,stamp+min(900,30*2**r['attempts']),error,r['event_id'],r['due'],lease))
     return sent
 

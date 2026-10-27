@@ -50,12 +50,18 @@ class DailyWorkflow(unittest.TestCase):
     def test_old_confirmation_button_cannot_confirm_new_action(self):
         sid='confirmation-session-12345'
         with patch.object(config,'API_KEY',''):
-            service.chat('Добавь задачу купить хлеб',sid)
+            draft=service.chat('Добавь задачу купить хлеб',sid)
+            self.assertIs(draft.get('changed',False),False);self.assertEqual(draft['events'],[])
+            self.assertEqual(draft['preview']['type'],'event');self.assertEqual(store.list_events()[1],0)
+            service.chat('да',sid);self.assertEqual(store.list_events()[1],1)
             first=service.chat('Удали ее',sid)
             revision=store.state_snapshot(sid)[1]
             self.assertTrue(first['actions'])
             service.chat('отмена',sid)
-            service.chat('Добавь задачу купить молоко',sid)
+            draft=service.chat('Добавь задачу купить молоко',sid)
+            self.assertIs(draft.get('changed',False),False);self.assertEqual(draft['events'],[])
+            self.assertEqual(store.list_events()[1],1)
+            service.chat('да',sid);self.assertEqual(store.list_events()[1],2)
             service.chat('Удали ее',sid)
         before=store.list_events()[1]
         req=urllib.request.Request(self.base+'/api/chat',data=json.dumps({'text':'да','session':sid,'expected_revision':revision}).encode(),headers={'Content-Type':'application/json'})
@@ -78,6 +84,15 @@ class DailyWorkflow(unittest.TestCase):
         with patch.object(config,'API_KEY','offline-test'),patch.object(ai,'plan',side_effect=planner) as model:
             first=send();second=send()
         self.assertEqual(first,second);self.assertEqual(model.call_count,1)
+        self.assertIs(first.get('changed',False),False);self.assertEqual(first['events'],[])
+        self.assertEqual(first['preview']['title'],'Planned task')
+        self.assertEqual([a['text'] for a in first['actions']],['да','изменить детали','отмена'])
+        self.assertEqual(store.list_events()[1],1)
+        confirmation=json.dumps({'text':'да','session':'isolated-http-session','expected_revision':first['actions'][0]['revision']}).encode()
+        for _ in range(2):
+            req=urllib.request.Request(self.base+'/api/chat',data=confirmation,headers={'Content-Type':'application/json','Idempotency-Key':'test-http-confirm-123456'})
+            with urllib.request.urlopen(req) as response:
+                result=json.load(response);self.assertTrue(result['changed']);self.assertEqual(result['events'][0]['title'],'Planned task')
         self.assertEqual(store.list_events()[1],2)
 
 if __name__=='__main__':unittest.main()

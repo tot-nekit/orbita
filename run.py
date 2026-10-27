@@ -60,14 +60,18 @@ def restore_handlers(previous):
     for signum,handler in previous.items():signal.signal(signum,handler)
 
 def backup_worker():
-    from backup import create_backup,rotate_backups
+    from backup import create_backup,rotate_backups,newest_backup_age,send_offsite
     interval,keep=backup_settings();stop=threading.Event()
     previous,received=install_stop_handlers(stop)
     try:
+        # A restart must not create a fresh copy and push older restore points out.
+        age=newest_backup_age()
+        if age is not None and age<interval:stop.wait(interval-age)
         while not stop.is_set():
             try:
-                create_backup();rotate_backups(keep)
+                path=create_backup();rotate_backups(keep)
                 print('Backup created and verified; retention applied.',flush=True)
+                send_offsite(path)
             except Exception as exc:
                 print('Backup failed ('+type(exc).__name__+'); retry scheduled.',flush=True)
             stop.wait(interval)
@@ -100,19 +104,33 @@ def health_ok(port):
             return response.status==200 and json.loads(response.read(4096)).get('ok') is True
     except Exception:return False
 
-def supervise(commands,stop,health_port=None,health_check=health_ok):
-    processes=[];next_check=time.monotonic()+60;failed_checks=0
+def supervise(commands,stop,health_port=None,health_check=health_ok,restartable=()):
+    """Web/edge failures restart the service; auxiliary workers restart alone."""
+    processes=[];launched=time.monotonic();next_check=launched+60;failed_checks=0
+    started={};pending={};delays={}
     try:
         for label,command,env in commands:
             if stop.is_set():return 0
             process=subprocess.Popen(command,cwd=config.ROOT,env=env,start_new_session=os.name=='posix')
-            processes.append(process);print('Started '+label+'.',flush=True)
+            processes.append(process);started[label]=launched;print('Started '+label+'.',flush=True)
         while not stop.is_set():
-            for (label,_,_),process in zip(commands,processes):
+            for index,((label,command,env),process) in enumerate(zip(commands,processes)):
                 status=process.poll()
-                if status is not None:
-                    print(label+' exited; stopping service for platform restart.',flush=True)
-                    return max(1,status) if status>=0 else 128-status
+                if status is None:continue
+                if label in restartable:
+                    now=time.monotonic()
+                    if label not in pending:
+                        # A worker that ran for 10 minutes starts again from a short delay.
+                        delay=5 if now-started[label]>600 else delays.get(label,5)
+                        delays[label]=min(delay*2,300);pending[label]=now+delay
+                        print(label+' exited; restarting it in '+str(int(delay))+'s. Website keeps running.',flush=True)
+                    elif now>=pending[label]:
+                        del pending[label]
+                        processes[index]=subprocess.Popen(command,cwd=config.ROOT,env=env,start_new_session=os.name=='posix')
+                        started[label]=now;print('Restarted '+label+'.',flush=True)
+                    continue
+                print(label+' exited; stopping service for platform restart.',flush=True)
+                return max(1,status) if status>=0 else 128-status
             if health_port is not None and time.monotonic()>=next_check:
                 failed_checks=0 if health_check(health_port) else failed_checks+1
                 next_check=time.monotonic()+30
@@ -152,6 +170,9 @@ def main():
         if edge and public_port==app_port:raise ValueError('PORT and APP_PORT must differ')
         if edge and not shutil.which('caddy'):raise ValueError('Install Caddy before starting the HTTP edge')
         if production and os.getenv('HOST','127.0.0.1')!='127.0.0.1':raise ValueError('Production HOST must be loopback')
+        if production and has_web:
+            # Fail before spawning any sibling if the production transport is missing.
+            import waitress
         # Complete schema, key and WAL setup before any worker starts.
         from app import store
         store.init()
@@ -167,7 +188,9 @@ def main():
         if edge:
             env=dict(os.environ,PORT=str(public_port),APP_PORT=str(app_port),FORWARDED_SCHEME='https' if production else 'http')
             commands.append(('edge',['caddy','run','--config',str(config.ROOT/'Caddyfile'),'--adapter','caddyfile'],env))
-        result=supervise(commands,stop,public_port if has_web else None)
+        # The bot and backup are auxiliary when the website runs in the same service.
+        restartable={'bot','backup'} if has_web else set()
+        result=supervise(commands,stop,public_port if has_web else None,restartable=restartable)
         return 128+received[0] if received else result
     except Exception as exc:
         print('Startup failed ('+type(exc).__name__+'). Check configuration; secrets are not logged.',flush=True)

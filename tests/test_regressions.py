@@ -9,12 +9,14 @@ from unittest.mock import patch
 
 from app import ai, config, dates, notifications, service, store
 from app.context import scope
+from fixture_clock import historical
 
 NOW = '2026-10-22T12:00:00+03:00'
 
 
 class Regressions(unittest.TestCase):
     def setUp(self):
+        clock = historical(); clock.start(); self.addCleanup(clock.stop)
         self.tmp = tempfile.TemporaryDirectory(prefix='orbita-regressions-')
         self.db = patch.object(store, 'DB_PATH', str(Path(self.tmp.name) / 'test.db'))
         self.db.start()
@@ -37,6 +39,19 @@ class Regressions(unittest.TestCase):
     def create(self, title='Original', **fields):
         return store.save(service.validate({'title': title, **fields}))
 
+    def assert_preview(self, result, count=0):
+        self.assertIs(result.get('changed', False), False); self.assertEqual(result['events'], [])
+        self.assertEqual(result['preview']['type'], 'event')
+        self.assertEqual([a['text'] for a in result['actions']], ['да', 'изменить детали', 'отмена'])
+        self.assertEqual(store.list_events()[1], count)
+
+    def create_chat(self, text):
+        count = store.list_events()[1]
+        self.assert_preview(self.chat(text), count)
+        result = self.chat('да'); self.assertTrue(result['changed'])
+        self.assertEqual(store.list_events()[1], count + 1)
+        return result
+
     def llm(self, text, plan, sid='conversation'):
         with patch.object(config, 'API_KEY', 'offline-stub'), patch.object(ai, 'plan', return_value=plan):
             return self.chat(text, sid)
@@ -53,26 +68,28 @@ class Regressions(unittest.TestCase):
         self.assertEqual(dates.resolve('в прошлом месяце', now)['period'], ('2026-09-01', '2026-09-30'))
 
     def test_named_month_and_short_meeting(self):
-        e = self.chat('Завтра в15 созвон с командой')['events'][0]
+        e = self.create_chat('Завтра в15 созвон с командой')['events'][0]
         self.assertEqual((e['kind'], e['date'], e['time']), ('meeting', '2026-10-23', '15:00'))
-        e = self.chat('Добавь задачу 25 октября отправить отчет')['events'][0]
+        e = self.create_chat('Добавь задачу 25 октября отправить отчет')['events'][0]
         self.assertEqual(e['date'], '2026-10-25')
         self.assertNotIn('октября', e['title'])
 
     def test_quoted_calendar_title(self):
-        e = self.chat('Добавь задачу «Завтра в 11»')['events'][0]
+        e = self.create_chat('Добавь задачу «Завтра в 11»')['events'][0]
         self.assertIsNone(e['date']); self.assertIsNone(e['time'])
         self.assertIn('Завтра в 11', e['title'])
-        e = self.chat('Добавь задачу «Каждый день»')['events'][0]
+        e = self.create_chat('Добавь задачу «Каждый день»')['events'][0]
         self.assertIn('Каждый день', e['title'])
-        e = self.llm('Добавь задачу «Отчет 25 октября» завтра',
-                     {'action': 'create', 'title': 'Отчет 25 октября', 'date': '2026-10-25'})['events'][0]
+        r = self.llm('Добавь задачу «Отчет 25 октября» завтра',
+                     {'action': 'create', 'title': 'Отчет 25 октября', 'date': '2026-10-25'})
+        self.assert_preview(r, 2); e = self.chat('да')['events'][0]
         self.assertEqual(e['date'], '2026-10-23')
 
     def test_calendar_overrides_llm(self):
-        e = self.llm('Напомни завтра в 11 позвонить Ивану',
+        r = self.llm('Напомни завтра в 11 позвонить Ивану',
                      {'action': 'create', 'title': 'Позвонить Ивану', 'kind': 'reminder',
-                      'date': '2026-12-01', 'time': '19:00'})['events'][0]
+                      'date': '2026-12-01', 'time': '19:00'})
+        self.assert_preview(r); e = self.chat('да')['events'][0]
         self.assertEqual((e['date'], e['time']), ('2026-10-23', '11:00'))
 
     def test_period_overrides_llm(self):
@@ -96,15 +113,19 @@ class Regressions(unittest.TestCase):
             with self.subTest(key=key), patch.object(config, 'API_KEY', key), patch.object(ai, 'plan', return_value={
                 'action': 'create', 'title': 'Подготовить отчет', 'date': '2026-10-26'
             }):
+                count = store.list_events()[1]
                 r = self.chat('Добавь задачу подготовить отчет на следующей неделе', sid)
                 self.assertIn('конкретный день', r['reply'])
                 self.assertEqual(store.state(sid)['pending']['action'], 'create')
                 r = self.chat('30 октября', sid)
+                self.assert_preview(r, count)
+                self.assertEqual(r['preview']['date'], '2026-10-30')
+                r = self.chat('да', sid)
                 self.assertEqual(r['events'][0]['date'], '2026-10-30')
                 self.assertIn('отчет', r['events'][0]['title'].lower())
 
     def test_pending_rename_and_date_title(self):
-        self.chat('Добавь задачу купить хлеб')
+        self.create_chat('Добавь задачу купить хлеб')
         self.chat('Переименуй ее')
         e = self.chat('Отчет за завтра')['events'][0]
         self.assertEqual(e['title'], 'Отчет за завтра'); self.assertIsNone(e['date'])
@@ -112,7 +133,8 @@ class Regressions(unittest.TestCase):
         self.assertIsNone(e['date'])
 
     def test_stale_delete_needs_confirmation_again(self):
-        e = self.chat('Добавь задачу купить хлеб')['events'][0]
+        r = self.chat('Добавь задачу купить хлеб'); self.assert_preview(r)
+        e = self.chat('да')['events'][0]; self.assertEqual(store.list_events()[1], 1)
         self.chat('Удали ее')
         store.save(dict(e, title='Revised object'), e['id'])
         r = self.chat('да')
@@ -128,8 +150,10 @@ class Regressions(unittest.TestCase):
     def test_bad_model_plans_fall_back(self):
         for raw in (None, [], {'action': []}, {'action': 'create', 'kind': []}, {'action': 'delete', 'id': True}):
             with self.subTest(raw=raw):
+                count = store.list_events()[1]
                 r = self.llm('Добавь задачу купить хлеб', raw)
-                self.assertEqual(r['mode'], 'local'); self.assertTrue(r['events'])
+                self.assertEqual(r['mode'], 'local'); self.assert_preview(r, count)
+                self.assertTrue(self.chat('да')['changed']); self.assertEqual(store.list_events()[1], count + 1)
 
     def test_invalid_date_clarifies(self):
         r = self.chat('Добавь встречу 31.02.2027 в 15:00')
@@ -160,7 +184,12 @@ class Regressions(unittest.TestCase):
         with scope('other'), store.atomic():
             self.assertEqual(service.chat('Добавь задачу купить хлеб', 'ready', prepared=prepared)['code'], 'stale_dialog')
         with store.atomic():
-            self.assertTrue(service.chat('Добавь задачу купить хлеб', 'ready', prepared=prepared)['changed'])
+            r = service.chat('Добавь задачу купить хлеб', 'ready', prepared=prepared)
+        self.assert_preview(r)
+        with scope('other'):
+            self.chat('да', 'ready'); self.assertEqual(store.list_events()[1], 0)
+        self.assertEqual(store.list_events()[1], 0)
+        self.assertTrue(self.chat('да', 'ready')['changed']); self.assertEqual(store.list_events()[1], 1)
 
     def test_cached_result_owner_digest_expiration(self):
         self.assertIsNone(store.cached_result('key', {'a': 1}))

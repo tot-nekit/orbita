@@ -3,12 +3,18 @@ import csv,io,json,logging,os,re,secrets,time,threading
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from urllib.parse import urlsplit,parse_qs
 from collections import defaultdict,deque
-from . import config,store,service,ai,security,notifications,auth,database
+from . import config,store,service,ai,security,notifications,auth,database,notes
 from .context import scope,owner
 from .dates import clock
-ROOT=config.ROOT/'app/static';VERSION='3.1.0';log=logging.getLogger('orbita')
+ROOT=config.ROOT/'app/static';VERSION='3.3.2';log=logging.getLogger('orbita')
 AUTH_ATTEMPTS=defaultdict(deque);RATE_LOCK=threading.Lock()
 STATIC={'/':'index.html','/mini':'index.html','/mini/':'index.html','/style.css':'style.css','/app.js':'app.js','/favicon.svg':'favicon.svg','/manifest.webmanifest':'manifest.webmanifest'}
+
+def positive_id(value):
+    # bool is an int subclass; SQLite also coerces strings and floats to IDs.
+    if type(value) is not int or not 0<value<=2**63-1:
+        raise ValueError('Некорректный ID или версия записи.')
+    return value
 
 def limited(key,limit=20,window=60):
     with RATE_LOCK:
@@ -28,7 +34,8 @@ class Handler(BaseHTTPRequestHandler):
         if isinstance(data,(dict,list)):data=json.dumps(data,ensure_ascii=False).encode()
         elif isinstance(data,str):data=data.encode()
         self.send_response(status)
-        mini=urlsplit(self.path).path.rstrip('/')=='/mini'
+        # Even a malformed request target must be able to receive an error.
+        mini=self.path.split('?',1)[0].rstrip('/')=='/mini'
         csp="default-src 'self'; script-src 'self'"+(' https://telegram.org' if mini else '')+"; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; frame-ancestors "+("'self' https://web.telegram.org https://*.telegram.org https://*.telegram.me" if mini else "'none'")+"; base-uri 'none'; form-action 'self'"
         values={'Content-Type':mime,'Content-Length':str(len(data)),'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Cache-Control':'no-store','Content-Security-Policy':csp,'Permissions-Policy':'camera=(), geolocation=()'}
         if not mini:values['X-Frame-Options']='DENY'
@@ -63,8 +70,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):self.dispatch('GET')
     def do_POST(self):self.dispatch('POST')
     def dispatch(self,method):
-        u=urlsplit(self.path);q={k:v[0] for k,v in parse_qs(u.query).items()}
         try:
+            u=urlsplit(self.path);q={k:v[0] for k,v in parse_qs(u.query,max_num_fields=100).items()}
             if database.production():
                 expected=urlsplit(os.getenv('PUBLIC_BASE_URL','')).netloc
                 if self.headers.get('Host')!=expected and not (u.path=='/api/health' and self.client_address[0] in ('127.0.0.1','::1')):
@@ -90,14 +97,18 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get('Sec-Fetch-Site')=='cross-site':return self.output({'error':'Cross-origin запрос запрещён.'},403)
                 expected=os.getenv('PUBLIC_BASE_URL','').rstrip('/') if database.production() else None
                 if origin and (origin!=expected if expected else urlsplit(origin).netloc!=self.headers.get('Host')):return self.output({'error':'Cross-origin запрос запрещён.'},403)
-                n=int(self.headers.get('Content-Length','0'))
+                length=self.headers.get('Content-Length','0')
+                if not re.fullmatch(r'[0-9]{1,12}',length):return self.output({'error':'Некорректная длина запроса.'},400)
+                n=int(length)
                 maximum=config.request_body_limit()
                 if n<=0 or n>maximum:return self.output({'error':f'Максимум {maximum//(1024*1024)} МБ.'},413)
                 if u.path=='/api/telegram/webhook' and n>256*1024:return self.output({'error':'Слишком большое обновление.'},413)
                 raw=self.rfile.read(n)
+                if len(raw)!=n:return self.output({'error':'Неполный запрос.'},400)
                 if u.path!='/api/transcribe':
-                    if 'application/json' not in self.headers.get('Content-Type',''):return self.output({'error':'Ожидается JSON.'},415)
-                    data=json.loads(raw)
+                    if self.headers.get('Content-Type','').split(';',1)[0].strip().lower()!='application/json':return self.output({'error':'Ожидается JSON.'},415)
+                    try:data=json.loads(raw)
+                    except (ValueError,UnicodeError,RecursionError):return self.output({'error':'Некорректный JSON.'},400)
                     if not isinstance(data,dict):raise ValueError('Ожидается JSON-объект.')
                 if u.path=='/api/telegram/webhook':
                     if os.getenv('TELEGRAM_MODE','polling')!='webhook' or not os.getenv('TELEGRAM_BOT_TOKEN'):return self.output({'error':'Webhook не настроен.'},404)
@@ -115,16 +126,22 @@ class Handler(BaseHTTPRequestHandler):
                     result,token={'register':auth.register,'login':auth.login,'recover':auth.recover}[action](data)
                     return self.output(result,headers={'Set-Cookie':self.cookie(token)})
                 if u.path in ('/api/login','/api/telegram/auth'):
-                    if limited(('login',self.client_address[0]),20):return self.output({'error':'Слишком много попыток. Подожди минуту.'},429)
+                    # Behind the proxies every socket peer is loopback; limit the real client.
+                    if limited(('login',self.remote()),20):return self.output({'error':'Слишком много попыток. Подожди минуту.'},429)
                     if u.path=='/api/login':
                         return self.output({'ok':True},headers={'Set-Cookie':self.cookie(security.issue('web'))})
-                    user=security.telegram_user(data.get('initData',''));uid='tg:'+str(user['id'])
-                    return self.output({'token':security.issue(uid),'name':str(user.get('first_name','Друг'))[:100]})
+                    # Validate initData and bind its token to the same epoch.
+                    # Unlink/relink cannot interleave between proof and issuance.
+                    with store.atomic():
+                        user=security.telegram_user(data.get('initData',''));uid='tg:'+str(user['id'])
+                        token=security.issue(uid)
+                    return self.output({'token':token,'name':str(user.get('first_name','Друг'))[:100]})
             identity=self.identity()
             with scope(identity):
                 if method=='GET':return self.get_api(u.path,q)
-                if u.path in ('/api/auth/password','/api/auth/delete'):
+                if u.path in ('/api/auth/password','/api/auth/delete','/api/telegram/unlink'):
                     auth.limit('sensitive',self.remote(),identity)
+                    if u.path=='/api/telegram/unlink':return self.output(auth.unlink_telegram(data))
                     if u.path.endswith('/delete'):
                         result=auth.delete_account(data)
                         return self.output(result,headers={'Set-Cookie':self.cookie()})
@@ -140,7 +157,9 @@ class Handler(BaseHTTPRequestHandler):
                     try:return self.output({'text':ai.transcribe(raw,mime)})
                     except Exception:return self.output({'error':'Распознавание недоступно. Используй текст.'},502)
                 if u.path=='/api/link':
-                    if limited(('link',identity),10):return self.output({'error':'Слишком много попыток. Подожди минуту.'},429)
+                    # Commit attempts before claiming a code; failed claims must
+                    # survive transaction rollback and process restarts.
+                    auth.limit('link',self.remote(),identity)
                     if identity.startswith('u:'):
                         auth.link_telegram(data.get('code',''));return self.output({'ok':True,'reload':True})
                     if auth.required():return self.output({'error':'Сначала войди в зарегистрированный аккаунт.'},403)
@@ -168,21 +187,39 @@ class Handler(BaseHTTPRequestHandler):
                 return self.output(result[0],result[1])
         except auth.AuthError as e:return self.output({'error':str(e)},e.status)
         except PermissionError as e:return self.output({'error':str(e),'code':'session_expired' if security.cookie_token(self.headers.get('Cookie')) and self.headers.get('X-Orbita-Client')!='mini' else 'unauthorized'},401)
-        except (ValueError,TypeError,KeyError) as e:return self.output({'error':str(e) or 'Некорректный запрос.'},400)
+        except (TypeError,KeyError,OverflowError,UnicodeError):return self.output({'error':'Некорректный запрос.'},400)
+        except ValueError as e:return self.output({'error':str(e) or 'Некорректный запрос.'},400)
         except (BrokenPipeError,ConnectionResetError):return
         except Exception:log.error('Request failed; contents and credentials redacted');return self.output({'error':'Внутренняя ошибка сервера.'},500)
     def in_transaction(self,path,data,prepared=None):
         with store.atomic():return self.post_api(path,data,prepared)
     def get_api(self,path,q):
+        if path=='/api/focus':
+            from . import focus
+            return self.output(focus.get())
+        if path=='/api/notes':
+            event_id=q.get('event_id')
+            if event_id is not None:
+                if not re.fullmatch(r'[1-9][0-9]{0,18}',event_id):raise ValueError('Некорректный ID плана.')
+                event_id=int(event_id)
+            return self.output(notes.listing(q.get('q','')[:200],q.get('board') or None,event_id,q.get('tag') or None))
+        if path=='/api/notes/get':
+            if not re.fullmatch(r'[1-9][0-9]{0,18}',q.get('id','')):raise ValueError('Некорректный ID заметки.')
+            note=notes.get(int(q['id']))
+            return self.output({'note':note} if note else {'error':'Заметка не найдена.'},200 if note else 404)
+        if path=='/api/events/get':
+            if not re.fullmatch(r'[1-9][0-9]{0,18}',q.get('id','')):raise ValueError('Некорректный ID записи.')
+            event=store.get_event(int(q['id']))
+            return self.output({'event':event} if event else {'error':'Запись не найдена.'},200 if event else 404)
         if path=='/api/health':return self.output({'ok':True,'version':VERSION})
         if path=='/api/config':
-            acc=store.account();registered=auth.user();linked=bool(acc['chat_id']) or owner().startswith('tg:')
+            acc=store.account();registered=auth.user();telegram=auth.telegram_status();linked=bool(acc['chat_id']) or owner().startswith('tg:') or telegram['linked']
             # Platform limits are public settings, never credentials.
             limits={'upload_bytes':config.request_body_limit()}
-            return self.output({'llm':bool(config.API_KEY),'stt':bool(config.STT_ENABLED and config.STT_API_KEY),'model':config.MODEL if config.API_KEY else None,'fallback_model':config.FALLBACK_MODEL if config.API_KEY else None,'version':VERSION,'limits':limits,'account':{'linked':linked,'timezone':acc['timezone'],'notify':bool(acc['notify']),'chat_connected':bool(acc['chat_id']),'username':registered['username'] if registered else None,'private':bool(registered),'use_ai':bool(acc['use_ai'])},'privacy':{'encrypted':database.encryption_enabled(),'ai_enabled':bool(config.API_KEY and acc['use_ai'])},'telegram':{'configured':bool(os.getenv('TELEGRAM_BOT_TOKEN')),'username':os.getenv('TELEGRAM_BOT_USERNAME','').lstrip('@'),'worker_online':notifications.health()}})
+            return self.output({'llm':bool(config.API_KEY),'stt':bool(config.STT_ENABLED and config.STT_API_KEY),'model':config.MODEL if config.API_KEY else None,'fallback_model':config.FALLBACK_MODEL if config.API_KEY else None,'version':VERSION,'limits':limits,'account':{'linked':linked,'timezone':acc['timezone'],'notify':bool(acc['notify']),'chat_connected':bool(acc['chat_id']),'username':registered['username'] if registered else None,'private':bool(registered),'use_ai':bool(acc['use_ai']),'telegram':telegram,'telegram_identity':telegram},'privacy':{'encrypted':database.encryption_enabled(),'ai_enabled':bool(config.API_KEY and acc['use_ai'])},'telegram':{'configured':bool(os.getenv('TELEGRAM_BOT_TOKEN')),'username':os.getenv('TELEGRAM_BOT_USERNAME','').lstrip('@'),'worker_online':notifications.health()}})
         if path=='/api/history':
             sid=self.sid(q.get('session',''))
-            return self.output({'messages':store.history(sid),'actions':service.dialog_actions(sid)})
+            return self.output({'messages':store.history(sid),'actions':service.dialog_actions(sid),'preview':service.dialog_preview(sid)})
         if path=='/api/notifications':
             return self.output({'notifications':notifications.delivery_status(max(1,min(200,int(q.get('limit','100'))))),'worker_online':notifications.health(),'interval_seconds':60 if os.getenv('TELEGRAM_MODE')=='webhook' else 15,'linked':bool(store.account()['chat_id']) or owner().startswith('tg:')})
         if path=='/api/events':
@@ -191,6 +228,8 @@ class Handler(BaseHTTPRequestHandler):
             if bucket not in (None,'inbox','overdue'):raise ValueError('Неизвестный список задач.')
             if q.get('q'):rows,total=store.search(q['q'],q.get('kind'),limit,offset)
             else:rows,total=store.list_events(q.get('start'),q.get('end'),q.get('kind'),q.get('status'),limit,offset,bucket=bucket,day=clock(store.account()['timezone']).date().isoformat())
+            attached=notes.counts([r['id'] for r in rows])
+            for r in rows:r['notes']=attached.get(r['id'],0)
             return self.output({'events':rows,'total':total,'offset':offset,'has_more':offset+len(rows)<total})
         if path=='/api/trash':
             from datetime import datetime,timezone,timedelta
@@ -199,6 +238,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.output({'events':rows})
         if path=='/api/stats':return self.output(store.stats(clock(q.get('tz',store.account()['timezone'])).date().isoformat()))
         if path=='/api/export':
+            if q.get('format')=='notes':
+                return self.output(notes.export_zip(),mime='application/zip',headers={'Content-Disposition':'attachment; filename="orbita-notes.zip"'})
             with store.connect() as db:rows=[dict(r) for r in db.execute('SELECT * FROM events WHERE owner=? AND deleted_at IS NULL ORDER BY id',(owner(),))]
             for r in rows:r.pop('owner',None);r.pop('deleted_at',None)
             if q.get('format')=='csv':
@@ -209,6 +250,13 @@ class Handler(BaseHTTPRequestHandler):
         return self.output({'error':'Не найдено.'},404)
     def post_api(self,path,data,prepared=None):
         if owner().startswith('u:') and not auth.user():raise PermissionError('Аккаунт удалён. Войди снова.')
+        if path in ('/api/focus','/api/focus/start','/api/focus/stop'):
+            from . import focus
+            return focus.post(path,data)
+        if path.startswith('/api/notes/'):return notes.post(path,data)
+        if path in ('/api/events/save','/api/events/delete','/api/events/restore','/api/events/snooze'):
+            if path!='/api/events/save' or data.get('id') is not None:positive_id(data.get('id'))
+            if data.get('revision') is not None:positive_id(data['revision'])
         if path=='/api/chat':
             text=data.get('text','')
             if not isinstance(text,str) or not 1<=len(text.strip())<=2000:raise ValueError('Запрос: 1–2000 символов.')
@@ -250,5 +298,11 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     logging.basicConfig(level=logging.INFO);store.init();security.secret()
     host=os.getenv('HOST','127.0.0.1');port=int(os.getenv('PORT','8000'))
-    print(f'Орбита v2 → http://{host}:{port}',flush=True);ThreadingHTTPServer((host,port),Handler).serve_forever()
+    if not 1<=port<=65535:raise ValueError('Неверный порт веб-сервера.')
+    if database.production() and host!='127.0.0.1':raise ValueError('Production HOST must be loopback')
+    print(f'Орбита v2 → http://{host}:{port}',flush=True)
+    if database.production():
+        from .http_runtime import serve
+        serve(host,port)
+    else:ThreadingHTTPServer((host,port),Handler).serve_forever()
 if __name__=='__main__':main()

@@ -106,10 +106,7 @@ try {
     "wrong current password must stay in settings",
   );
   await page.locator("#password-details summary").click();
-  assert.match(
-    await page.locator("#encryption-state").textContent(),
-    /не включено/,
-  );
+  assert.equal(await page.locator('.auth-privacy, .privacy-card').count(), 0);
   const cookies = await context.cookies();
   assert.ok(
     cookies.some(
@@ -163,14 +160,29 @@ try {
   assert.equal(records.events[0].title, "Private Alice task");
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const view of ["assistant", "planner", "archive", "settings"]) {
+    for (const view of ["assistant", "planner", "notes", "settings"]) {
       await page.click(`[data-view=${view}]`);
+      await page.locator(`#view-${view}`).waitFor();
       assert.ok(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
         `private overflow: ${width}/${view}`,
       );
+      if (width > 760) {
+        assert.equal(await page.locator("#nav-home-label").textContent(), "Сегодня");
+        assert.equal(await page.locator("#chat-form").isVisible(), false);
+        await page.click("#assistant-fab");
+        await page.locator("#assistant-dock #chat-form").waitFor();
+        assert.ok(
+          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          `private dock overflow: ${width}/${view}`,
+        );
+        await page.click("#dock-close");
+      } else if (view === "assistant") {
+        await page.locator("#view-assistant #chat-form").waitFor();
+        assert.equal(await page.locator("#assistant-fab").isVisible(), false);
+      }
     }
   }
   await page.setViewportSize({ width: 1440, height: 1000 });

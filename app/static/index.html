@@ -158,24 +158,6 @@
             Почта и настоящее имя не нужны. Сохрани псевдоним и код
             восстановления: без пароля и кода вернуть доступ не получится.
           </p>
-          <details class="auth-privacy">
-            <summary>Как устроена приватность</summary>
-            <p>
-              Для регистрации достаточно псевдонима и пароля. Сессия хранится в
-              HttpOnly cookie. Код восстановления показывается один раз;
-              приложение не сохраняет его в браузере.
-            </p>
-            <p>
-              Если на сервере включено шифрование, данные шифруются при
-              хранении. Это не сквозное шифрование: сервер обрабатывает записи и
-              управляет ключом. Текущий статус виден в настройках.
-            </p>
-            <p>
-              ИИ для нового аккаунта выключен. При включении запрос и нужный
-              контекст передаются провайдеру модели. Сообщения и уведомления в
-              Telegram находятся вне зашифрованного хранилища приложения.
-            </p>
-          </details>
         </div>
       </div>
     </section>
@@ -235,34 +217,29 @@
         </div>
         <nav aria-label="Разделы приложения">
           <button class="nav active" data-view="assistant">
-            <span data-icon="spark"></span>Ассистент</button
+            <span id="nav-home-icon" data-icon="spark"></span><span id="nav-home-label">Ассистент</span></button
           ><button class="nav" data-view="planner">
             <span data-icon="calendar"></span>Мои планы</button
-          ><button class="nav" data-view="archive">
-            <span data-icon="search"></span>Поиск</button
+          ><button class="nav" data-view="notes">
+            <span data-icon="note"></span>Заметки</button
           ><button class="nav" data-view="settings">
             <span data-icon="settings"></span>Настройки
           </button>
         </nav>
         <div class="side-note">
           <span data-icon="spark"></span><strong>Быстрые действия</strong>
-          <p><kbd>N</kbd> — новая запись<br /><kbd>⌘ / Ctrl K</kbd> — поиск</p>
+          <p><kbd>N</kbd> — новая запись или заметка<br /><kbd>⌘ / Ctrl K</kbd> — поиск<br /><kbd>⌘ / Ctrl J</kbd> — ассистент</p>
           <button id="side-create" class="subtle">
             Добавить запись <span>↗</span>
           </button>
         </div>
-        <div class="connection">
-          <i></i><span id="connection">Подключение…</span
-          ><span class="version">3.1.0</span>
-        </div>
+        <span id="connection" class="sr-only" role="status"></span>
       </aside>
       <main>
         <header class="topbar">
-          <div class="breadcrumb">
-            <span id="channel-label">Орбита</span
-            ><span class="separator">/</span
-            ><strong id="page-label">Ассистент</strong>
-          </div>
+          <button id="top-brand" class="top-brand" type="button" aria-label="Орбита — на главную">
+            <img src="/favicon.svg" width="28" height="28" alt="" /><span>орбита</span>
+          </button>
           <div class="top-actions">
             <span id="date-label"></span
             ><button
@@ -288,6 +265,14 @@
               <span data-icon="spark"></span><i></i>
             </div>
           </div>
+          <section id="daily-focus" class="daily-focus" aria-label="Фокус дня" hidden>
+            <div class="focus-copy">
+              <span class="focus-eyebrow">Фокус дня</span>
+              <h2 id="focus-title"></h2>
+              <p id="focus-note"></p>
+            </div>
+            <div id="focus-actions" class="focus-actions"></div>
+          </section>
           <div class="stats">
             <button id="open-today">
               <span class="stat-icon" data-icon="calendar"></span>
@@ -334,7 +319,17 @@
                 >
                   <span data-icon="volume"></span>
                 </button>
+                <button
+                  id="dock-close"
+                  class="icon-button dock-only"
+                  type="button"
+                  aria-label="Свернуть ассистента"
+                  title="Свернуть · Esc"
+                >
+                  <span data-icon="minus"></span>
+                </button>
               </div>
+              <div id="chat-pins" class="chat-pins" aria-label="Закреплено"></div>
               <div
                 id="messages"
                 class="messages"
@@ -377,8 +372,6 @@
                 <div class="composer-hint">
                   <span id="voice-status"
                     >Enter — отправить · Shift + Enter — перенос</span
-                  ><span class="hint-lock"
-                    ><span data-icon="lock"></span> Общее веб-пространство</span
                   >
                 </div>
               </div>
@@ -399,13 +392,23 @@
               <button id="all-today" class="subtle">
                 Открыть весь день <span>↗</span>
               </button>
-              <div class="tip">
-                <span data-icon="link"></span><strong>Telegram</strong>
-                <p>
-                  Подключи Telegram в настройках, чтобы работать с теми же
-                  записями с телефона.
-                </p>
+            </aside>
+            <aside id="home-notes" class="home-notes" hidden>
+              <div class="section-title">
+                <h2>Заметки</h2>
+                <button
+                  id="home-note-add"
+                  class="icon-button"
+                  aria-label="Новая заметка"
+                >
+                  <span data-icon="plus"></span>
+                </button>
               </div>
+              <p class="muted">Закреплённые и недавние</p>
+              <div id="home-notes-list" class="home-notes-list"></div>
+              <button id="home-notes-all" class="subtle">
+                Все заметки <span>↗</span>
+              </button>
             </aside>
           </div>
           <div class="suggestions">
@@ -417,10 +420,6 @@
               <span data-icon="search"></span>Найти запись
             </button>
           </div>
-          <p class="privacy-note">
-            Текст запроса отправляется ассистенту. Telegram подключается в
-            настройках.
-          </p>
         </section>
         <section id="view-planner" class="view" hidden>
           <div class="page-heading">
@@ -432,7 +431,40 @@
               <span data-icon="plus"></span>Добавить запись
             </button>
           </div>
-          <div class="filters">
+          <div class="filters" id="filters">
+            <div class="filter-bar">
+              <form id="search-form" class="plan-search" role="search">
+                <span data-icon="search"></span
+                ><label class="sr-only" for="search">Поиск по планам</label
+                ><input
+                  id="search"
+                  type="search"
+                  maxlength="200"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                  placeholder="Найти: презентация, Иван…"
+                /><button
+                  type="button"
+                  id="search-clear"
+                  class="icon-button"
+                  aria-label="Очистить поиск"
+                  hidden
+                >
+                  <span data-icon="close"></span>
+                </button>
+              </form>
+              <button
+                type="button"
+                id="filters-toggle"
+                class="filters-toggle"
+                aria-expanded="false"
+                aria-controls="filters-panel"
+              >
+                <span data-icon="sliders"></span
+                ><span id="filters-summary">Сегодня</span>
+              </button>
+            </div>
+            <div id="filters-panel" class="filters-panel">
             <div class="range-tabs" role="group" aria-label="Период">
               <button class="filter active" data-range="today">Сегодня</button
               ><button class="filter" data-range="tomorrow">Завтра</button
@@ -462,6 +494,7 @@
               <label>С даты<input id="range-start" type="date" /></label
               ><label>По дату<input id="range-end" type="date" /></label>
             </div>
+            </div>
           </div>
           <div class="list-heading">
             <p id="planner-count" class="muted"></p>
@@ -474,33 +507,57 @@
             Показать ещё
           </button>
         </section>
-        <section id="view-archive" class="view" hidden>
+        <section id="view-notes" class="view" hidden>
           <div class="page-heading">
             <div>
-              <h1>Найти в планах</h1>
-              <p>По названию или части названия.</p>
+              <h1>Заметки</h1>
+              <p>Доски, связи между заметками и планы.</p>
+            </div>
+            <button class="primary" id="note-add">
+              <span data-icon="plus"></span>Новая заметка
+            </button>
+          </div>
+          <div class="notes-toolbar">
+            <form id="notes-search-form" class="plan-search" role="search">
+              <span data-icon="search"></span
+              ><label class="sr-only" for="notes-search">Поиск по заметкам</label
+              ><input
+                id="notes-search"
+                type="search"
+                maxlength="200"
+                autocomplete="off"
+                enterkeyhint="search"
+                placeholder="Найти в заметках или #тег"
+              /><button
+                type="button"
+                id="notes-search-clear"
+                class="icon-button"
+                aria-label="Очистить поиск"
+                hidden
+              >
+                <span data-icon="close"></span>
+              </button>
+            </form>
+            <div
+              id="board-tabs"
+              class="board-tabs"
+              role="group"
+              aria-label="Доски"
+            ></div>
+            <div id="notes-modes" class="notes-modes" role="group" aria-label="Вид заметок">
+              <button type="button" data-notes-layout="boards" aria-pressed="true"><span data-icon="board"></span>Доски</button>
+              <button type="button" data-notes-layout="files" aria-pressed="false"><span data-icon="note"></span>Хранилище</button>
+              <button type="button" data-notes-layout="graph" aria-pressed="false"><span data-icon="graph"></span>Связи</button>
             </div>
           </div>
-          <form id="search-form" class="searchbar">
-            <span data-icon="search"></span
-            ><label class="sr-only" for="search">Что найти?</label
-            ><input
-              id="search"
-              maxlength="200"
-              placeholder="Презентация, Иван, контракт…"
-            /><button class="primary">Найти</button>
-          </form>
-          <p id="search-count" class="muted">Введите название, имя или тему.</p>
-          <div id="search-list" class="records-grid"></div>
-          <button id="search-more" class="secondary load-more" hidden>
-            Показать ещё
-          </button>
+          <div id="notes-filter" class="notes-filter" hidden></div>
+          <div id="notes-board" class="notes-board" aria-live="polite"></div>
         </section>
         <section id="view-settings" class="view" hidden>
           <div class="page-heading">
             <div>
               <h1>Настройки</h1>
-              <p>Твоё пространство, приватность и подключения.</p>
+              <p>Аккаунт, внешний вид и подключения.</p>
             </div>
           </div>
           <div class="settings-grid">
@@ -510,10 +567,6 @@
               <p class="account-identity">
                 <strong id="settings-username"></strong
                 ><span class="privacy-badge">Личное пространство</span>
-              </p>
-              <p>
-                Для входа нужен только псевдоним. Почта и настоящее имя не
-                требуются.
               </p>
               <details id="password-details">
                 <summary>Изменить пароль</summary>
@@ -585,24 +638,22 @@
                 </form>
               </details>
             </section>
-            <section class="setting-card privacy-card">
-              <div class="setting-icon" data-icon="lock"></div>
-              <h2>Приватность</h2>
-              <p id="encryption-state">Проверяем защиту хранилища…</p>
-              <p>
-                Шифрование при хранении не является сквозным: сервер
-                обрабатывает записи и управляет ключом.
-              </p>
-              <p>
-                При включённом ИИ запрос и нужный контекст диалога передаются
-                провайдеру модели. Сообщения и уведомления в Telegram находятся
-                вне зашифрованного хранилища приложения.
-              </p>
-            </section>
             <section class="setting-card telegram-card">
               <div class="setting-icon" data-icon="telegram"></div>
               <h2>Сайт + Telegram</h2>
               <p id="telegram-state">Проверяем подключение…</p>
+              <p id="telegram-identity" class="muted" hidden></p>
+              <details id="telegram-unlink-details" hidden>
+                <summary>Отключить Telegram</summary>
+                <form id="telegram-unlink-form" class="account-form">
+                  <p>Записи останутся в этом аккаунте. Бот и Mini App потеряют доступ, доставка в Telegram прекратится.</p>
+                  <label for="telegram-unlink-password">Текущий пароль аккаунта</label>
+                  <input id="telegram-unlink-password" type="password" autocomplete="current-password" maxlength="128" required />
+                  <label><input id="telegram-unlink-confirmed" type="checkbox" required /> Подтверждаю отключение Telegram</label>
+                  <button id="telegram-unlink-submit" class="secondary danger">Отключить Telegram</button>
+                </form>
+                <p id="telegram-unlink-error" class="form-error" role="alert"></p>
+              </details>
               <a
                 id="open-bot"
                 class="primary"
@@ -667,39 +718,20 @@
               >
               <p id="use-ai-state" hidden></p>
               <p id="ai-details"></p>
-              <p>
-                Без ключа работает ограниченный локальный разбор. С LLM можно
-                формулировать свободнее. API-ключ остаётся на сервере.
-              </p>
-              <p id="voice-details">
-                Микрофон требует HTTPS или localhost. В боте можно отправить
-                обычное голосовое; перед выполнением запроса ты проверишь
-                расшифровку.
-              </p>
+              <p id="voice-details"></p>
               <button id="new-chat" class="secondary">Новый диалог</button>
             </section>
             <section class="setting-card">
               <div class="setting-icon" data-icon="database"></div>
               <h2>Данные</h2>
-              <details id="demo-data">
-                <summary>Учебный пример: 1000 записей</summary>
-                <p>
-                  Добавит 1000 учебных записей в текущий аккаунт. Это не твои
-                  личные планы. Исходные даты сохраняются; старые задачи попадут
-                  в «Просрочено». Повторный импорт не создаёт дубликатов.
-                </p>
-                <button class="secondary" id="import-data">
-                  Загрузить пример
-                </button>
-                <p id="import-result" role="status"></p>
-              </details>
               <div class="export-links">
                 <button class="secondary" id="export-json">Скачать JSON</button
                 ><button class="secondary" id="export-csv">Скачать CSV</button>
+                <button class="secondary" id="export-notes">Заметки · Markdown</button>
               </div>
               <p>
-                Удаление можно отменить в течение 10 минут. В экспорте нет
-                удалённых записей.
+                Удаление можно отменить в течение 10 минут. Заметки скачиваются
+                архивом .md-файлов — его можно открыть в Obsidian как хранилище.
               </p>
               <button class="subtle" id="open-trash">Недавно удалённые</button>
               <div id="trash-list" hidden></div>
@@ -711,6 +743,24 @@
         </section>
       </main>
     </div>
+    <button
+      id="assistant-fab"
+      class="assistant-fab"
+      type="button"
+      aria-controls="assistant-dock"
+      aria-expanded="false"
+      aria-label="Открыть ассистента"
+      title="Ассистент · Ctrl/⌘ J"
+      hidden
+    >
+      <span data-icon="spark"></span>
+    </button>
+    <section
+      id="assistant-dock"
+      class="assistant-dock"
+      aria-label="Ассистент"
+      hidden
+    ></section>
     <dialog id="event-dialog">
       <form id="event-form">
         <div class="dialog-header">
@@ -759,6 +809,26 @@
           >
         </div>
         <p id="event-zone" class="muted"></p>
+        <section id="event-notes" class="event-notes" hidden>
+          <div class="event-notes-head">
+            <strong>Заметки к плану</strong
+            ><button type="button" id="event-note-new" class="subtle">
+              <span data-icon="plus"></span>Новая
+            </button>
+          </div>
+          <div id="event-notes-list" class="event-notes-list"></div>
+          <div class="picker">
+            <label class="sr-only" for="event-note-pick">Прикрепить заметку</label>
+            <input
+              id="event-note-pick"
+              type="search"
+              autocomplete="off"
+              maxlength="200"
+              placeholder="Прикрепить существующую заметку…"
+            />
+            <div id="event-note-results" class="picker-results" hidden></div>
+          </div>
+        </section>
         <p id="form-error" class="form-error" role="alert"></p>
         <div class="dialog-footer">
           <button type="button" id="dialog-cancel" class="secondary">
@@ -776,6 +846,91 @@
         ><button id="confirm-yes" class="primary">Подтвердить</button>
       </div>
     </dialog>
+    <dialog id="text-dialog">
+      <form id="text-form" method="dialog">
+        <h2 id="text-title">Название</h2>
+        <label class="sr-only" for="text-value">Название</label>
+        <input id="text-value" maxlength="40" autocomplete="off" required />
+        <p id="text-error" class="form-error" role="alert"></p>
+        <div class="dialog-footer">
+          <button type="button" id="text-cancel" class="secondary">Отмена</button
+          ><button id="text-ok" class="primary">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="note-dialog" class="note-dialog" aria-labelledby="note-title">
+      <div class="note-shell">
+        <nav id="note-tabs" class="note-tabs" aria-label="Открытые заметки"></nav>
+        <header class="note-head">
+          <label class="sr-only" for="note-board">Доска</label>
+          <select id="note-board"></select>
+          <div id="note-colors" class="note-colors" role="group" aria-label="Цвет заметки"></div>
+          <span id="note-status" class="note-status" role="status"></span>
+          <button id="note-pin" type="button" class="icon-button" aria-pressed="false" aria-label="Закрепить" title="Закрепить">
+            <span data-icon="pin"></span>
+          </button>
+          <button id="note-delete" type="button" class="icon-button" aria-label="Удалить заметку" title="Удалить">
+            <span data-icon="trash"></span>
+          </button>
+          <button id="note-close" type="button" class="icon-button" aria-label="Закрыть" title="Закрыть · Esc">
+            <span data-icon="close"></span>
+          </button>
+        </header>
+        <aside class="note-explorer">
+          <div class="note-explorer-head"><strong>Хранилище</strong><button id="explorer-new" class="icon-button" type="button" aria-label="Новая заметка"><span data-icon="plus"></span></button></div>
+          <div id="note-files"></div>
+        </aside>
+        <div class="note-main">
+          <label class="sr-only" for="note-title">Название заметки</label>
+          <input id="note-title" class="note-title" maxlength="200" autocomplete="off" placeholder="Без названия" />
+          <div class="note-bar">
+            <div class="note-modes" role="group" aria-label="Режим">
+              <button type="button" data-note-mode="edit" aria-pressed="true">Текст</button
+              ><button type="button" data-note-mode="preview" aria-pressed="false">Просмотр</button>
+            </div>
+            <div id="note-tools" class="note-tools" role="group" aria-label="Оформление">
+              <button type="button" data-insert="heading" title="Заголовок">H</button
+              ><button type="button" data-insert="bold" title="Жирный"><b>Ж</b></button
+              ><button type="button" data-insert="check" title="Пункт списка дел">☐</button
+              ><button type="button" data-insert="link" title="Ссылка на заметку">[[ ]]</button
+              ><button type="button" data-insert="tag" title="Тег">#</button>
+            </div>
+          </div>
+          <div id="note-conflict" class="note-conflict" hidden>
+            <p>В другом окне появилась новая версия. Твой текст остался здесь.</p>
+            <button id="note-server-version" type="button" class="secondary">Загрузить с сервера</button>
+            <button id="note-my-version" type="button" class="secondary">Сохранить мой текст</button>
+          </div>
+          <div class="note-editor">
+            <label class="sr-only" for="note-body">Текст заметки</label>
+            <textarea id="note-body" maxlength="20000" placeholder="Пиши свободно. [[Название]] свяжет с другой заметкой, #тег поможет найти, «- [ ]» превратится в чекбокс."></textarea>
+            <div id="note-suggest" class="note-suggest" role="listbox" aria-label="Заметки для ссылки" hidden></div>
+            <article id="note-preview" class="note-preview" hidden></article>
+          </div>
+        </div>
+        <aside class="note-side">
+          <section class="note-section">
+            <h3><span data-icon="calendar"></span>Планы</h3>
+            <div id="note-events" class="note-chips"></div>
+            <div class="picker">
+              <label class="sr-only" for="note-attach">Прикрепить к плану</label>
+              <input id="note-attach" type="search" autocomplete="off" maxlength="200" placeholder="Прикрепить к плану…" />
+              <div id="note-attach-results" class="picker-results" hidden></div>
+            </div>
+          </section>
+          <section class="note-section">
+            <h3><span data-icon="link"></span>Ссылки</h3>
+            <div id="note-outgoing" class="note-chips"></div>
+          </section>
+          <section class="note-section">
+            <h3><span data-icon="arrow-left"></span>Упоминания</h3>
+            <div id="note-backlinks" class="note-chips"></div>
+          </section>
+          <p id="note-dates" class="note-dates"></p>
+        </aside>
+      </div>
+    </dialog>
+    <div id="board-menu" class="board-menu" role="menu" hidden></div>
     <div id="toast" role="status" hidden>
       <span id="toast-text"></span><button id="toast-action" hidden></button
       ><button id="toast-close" aria-label="Закрыть уведомление">

@@ -76,10 +76,17 @@ def init():
         CREATE INDEX IF NOT EXISTS auth_sessions_owner ON auth_sessions(owner);
         CREATE TABLE IF NOT EXISTS auth_limits(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,expires REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS telegram_links(telegram_owner TEXT PRIMARY KEY,user_owner TEXT UNIQUE NOT NULL);
+        CREATE TABLE IF NOT EXISTS telegram_identities(telegram_owner TEXT PRIMARY KEY,username TEXT,display_name TEXT,epoch INTEGER NOT NULL DEFAULT 0,verified_at TEXT,revoked_before INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS ai_usage(owner TEXT,day TEXT,requests INTEGER NOT NULL,PRIMARY KEY(owner,day));
+        CREATE TABLE IF NOT EXISTS daily_focus(owner TEXT NOT NULL,day TEXT NOT NULL,event_id INTEGER,started_at INTEGER,ends_at INTEGER,PRIMARY KEY(owner,day));
         CREATE TABLE IF NOT EXISTS telegram_inbox(id INTEGER PRIMARY KEY,owner TEXT NOT NULL,digest TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,next_try REAL NOT NULL DEFAULT 0,lease_until REAL NOT NULL DEFAULT 0,lease_token TEXT,created REAL NOT NULL,last_error TEXT);
         CREATE INDEX IF NOT EXISTS telegram_inbox_pending ON telegram_inbox(status,next_try,lease_until,id);
         CREATE TABLE IF NOT EXISTS notifications(event_id INTEGER,due TEXT,owner TEXT,status TEXT,attempts INTEGER DEFAULT 0,next_try REAL DEFAULT 0,lease_until REAL DEFAULT 0,last_error TEXT,lease_token TEXT,PRIMARY KEY(event_id,due));
+        CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY,owner TEXT NOT NULL,board TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL DEFAULT '',pinned INTEGER NOT NULL DEFAULT 0,color TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,deleted_at TEXT,revision INTEGER NOT NULL DEFAULT 1);
+        CREATE INDEX IF NOT EXISTS notes_owner ON notes(owner,deleted_at,board,updated_at);
+        CREATE TABLE IF NOT EXISTS note_boards(owner TEXT NOT NULL,name TEXT NOT NULL,position INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,PRIMARY KEY(owner,name));
+        CREATE TABLE IF NOT EXISTS note_events(owner TEXT NOT NULL,note_id INTEGER NOT NULL,event_id INTEGER NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(note_id,event_id));
+        CREATE INDEX IF NOT EXISTS note_events_event ON note_events(owner,event_id);
         '''
         for statement in schema.split(';'):
             if statement.strip():db.execute(statement)
@@ -87,6 +94,8 @@ def init():
             db.execute('ALTER TABLE notifications ADD COLUMN lease_token TEXT')
         if 'use_ai' not in [r['name'] for r in db.execute('PRAGMA table_info(accounts)')]:
             db.execute('ALTER TABLE accounts ADD COLUMN use_ai INTEGER NOT NULL DEFAULT 1')
+        if 'revoked_before' not in [r['name'] for r in db.execute('PRAGMA table_info(telegram_identities)')]:
+            db.execute('ALTER TABLE telegram_identities ADD COLUMN revoked_before INTEGER NOT NULL DEFAULT 0')
         # Migrate v1 conversation keys once; owner-prefix prevents guessing another account's session.
         if not db.execute("SELECT 1 FROM runtime WHERE key='sessions_v2'").fetchone():
             db.execute("UPDATE sessions SET id='web:'||id WHERE id NOT LIKE 'web:%' AND id NOT LIKE 'tg:%'")
@@ -151,27 +160,51 @@ def list_events(start=None,end=None,kind=None,status=None,limit=200,offset=0,buc
 
 STOP={'найди','найти','задача','задачу','задачи','встреча','встречу','встречи','событие','когда','была','было','меня','про','мне','покажи','старые','раньше','ставил','напоминание','с','по','и','я','у','на','который','пожалуйста'}
 SYNONYMS={'отчет':'отчет','репорт':'отчет','доклад':'отчет','презентац':'презентац','слайд':'презентац','созвон':'встреч','встреч':'встреч','звонок':'звон','позвон':'звон','звон':'звон','контракт':'договор','договор':'договор'}
-def tokens(s):
+def normalize(s):
+    return ' '.join(re.findall(r'[a-zа-я0-9]+',s.lower().replace('ё','е')))
+
+def tokens(s,stop=True):
     out=[]
     for w in re.findall(r'[a-zа-я0-9]+',s.lower().replace('ё','е')):
-        if w in STOP or len(w)<2:continue
+        if stop and w in STOP or len(w)<2:continue
         w=re.sub(r'(иями|ями|ами|ого|ему|ому|ией|ий|ой|ей|ом|ем|ам|ям|ах|ях|ов|ев|ую|юю|а|я|у|ю|ы|и|е|о|ь)$','',w)
         w=next((v for k,v in SYNONYMS.items() if w.startswith(k)),w)
         if w:out.append(w)
     return out
 
+def _word_score(t,words,raw):
+    """How well one query word matches a title: exact stem, typed prefix, synonym or typo."""
+    best=0
+    for w in words:
+        if t==w:return 1
+        if min(len(t),len(w))>=3 and (w.startswith(t) or t.startswith(w)):best=max(best,.9)
+        elif min(len(t),len(w))>=4 and SequenceMatcher(None,t,w).ratio()>=.78:best=max(best,.7)
+    # A partly typed word ("отч", "през") matches the start of a title word.
+    if best<.9 and len(t)>=2 and any(r.startswith(t) for r in raw):best=.9
+    return best
+
 def search(q,kind=None,limit=30,offset=0):
-    ts=tokens(q)
-    if not ts:return [],0
+    """Search titles by phrase, word start, word form, synonym or a small typo.
+
+    Service words such as «найди» or «задачу» are ignored only when the query
+    has other words: a title like «Встреча» must still be found by itself."""
+    phrase=normalize(q)
+    if len(phrase)<2:return [],0
+    ts=tokens(q) or tokens(q,stop=False)
+    raw_query=phrase.split()
     with connect() as db:rows=[dict(r) for r in db.execute('SELECT * FROM events WHERE owner=? AND deleted_at IS NULL'+(' AND kind=?' if kind else ''),[owner()]+([kind] if kind else []))]
     ranked=[]
     for row in rows:
-        ws=tokens(row['title']);scores=[]
-        for t in ts:
-            scores.append(max((1 if t==w else .88 if min(len(t),len(w))>=4 and (t.startswith(w) or w.startswith(t)) else .7 if SequenceMatcher(None,t,w).ratio()>=.78 else 0 for w in ws),default=0))
-        score=sum(scores)/len(scores)
+        title=normalize(row['title'])
+        if phrase in title:
+            score=1.2 if title.startswith(phrase) else 1.1
+        else:
+            words=tokens(row['title'],stop=False);raw=title.split()
+            scores=[_word_score(t,words,raw) for t in ts] if ts else [_word_score(t,words,raw) for t in raw_query]
+            score=sum(scores)/len(scores) if scores else 0
         if score>=.55:ranked.append((score,row))
-    ranked.sort(key=lambda x:(x[0],x[1]['date'] or ''),reverse=True)
+    # Best match first; among equals, active before done, then the nearest date.
+    ranked.sort(key=lambda x:(-x[0],x[1]['status']!='active',x[1]['date'] or '9999'))
     return [r for _,r in ranked[offset:offset+limit]],len(ranked)
 
 def conflicts(e,exclude=None):

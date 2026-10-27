@@ -9,6 +9,8 @@ __pycache__/
 node_modules
 test-results/
 .playwright/
+.playwright-cli/
+output/playwright/
 /data/
 .venv/
 venv/

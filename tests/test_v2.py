@@ -4,6 +4,7 @@ from datetime import datetime,timezone,timedelta
 from unittest.mock import patch
 from app import store,service,security,notifications,telegram_bot,config
 from app.context import scope
+from fixture_clock import historical
 
 def init_data(uid=101,token='test:token',timestamp=None,**extra):
     data={'auth_date':str(int(time.time()) if timestamp is None else timestamp),'query_id':'query-test','user':json.dumps({'id':uid,'first_name':'Тест'},ensure_ascii=False,separators=(',',':')),**extra}
@@ -148,13 +149,23 @@ class Bot(Case):
     def test_denied_no_data(self):
         with patch.dict(os.environ,{'TELEGRAM_ALLOW_PUBLIC':'0'}):self.assertIn('ограничен',self.run_update(text='/start')['text'])
     def test_create(self):
-        self.run_update(text='Добавь задачу купить хлеб')
+        r=self.run_update(text='Добавь задачу купить хлеб')
+        with scope('tg:101'):
+            self.assertEqual(store.list_events()[1],0)
+            self.assertEqual(service.dialog_preview('telegram-conversation')['type'],'event')
+        cb=r['reply_markup']['inline_keyboard'][0][0]['callback_data'];self.assertTrue(cb.startswith('yes:'))
+        self.run_update(data=cb)
         with scope('tg:101'):self.assertEqual(store.list_events()[1],1)
     def test_duplicate_update(self):
         u=self.update(text='Добавь задачу купить хлеб');a=telegram_bot.handle(u,self.client);b=telegram_bot.handle(u,self.client);self.assertEqual(a,b)
+        with scope('tg:101'):self.assertEqual(store.list_events()[1],0)
+        confirmation=self.update(data=a['reply_markup']['inline_keyboard'][0][0]['callback_data'])
+        a=telegram_bot.handle(confirmation,self.client);b=telegram_bot.handle(confirmation,self.client);self.assertEqual(a,b)
         with scope('tg:101'):self.assertEqual(store.list_events()[1],1)
     def test_shared_data_with_mini(self):
         self.run_update(text='Добавь задачу купить хлеб')
+        with scope('tg:101'):self.assertEqual(store.search('хлеб')[1],0)
+        self.run_update(text='да')
         with scope('tg:101'):self.assertEqual(store.search('хлеб')[1],1)
     def test_foreign_callback_denied(self):
         with scope('tg:999'):e=self.create()
@@ -162,7 +173,7 @@ class Bot(Case):
         with scope('tg:999'):self.assertEqual(store.get_event(e['id'])['status'],'active')
     def test_delete_confirmation_nonce(self):
         with scope('tg:101'):e=self.create()
-        r=self.run_update(data='askdel:'+str(e['id']));callback=r['reply_markup']['inline_keyboard'][0][0]['callback_data'];self.assertTrue(callback.startswith('yes:'))
+        r=self.run_update(data=f'askdel:{e["id"]}:{e["revision"]}');callback=r['reply_markup']['inline_keyboard'][0][0]['callback_data'];self.assertTrue(callback.startswith('yes:'))
         self.assertIn('неактуально',self.run_update(data='yes:wrong')['text']);self.run_update(data=callback)
         with scope('tg:101'):self.assertIsNone(store.get_event(e['id']))
     def test_voice_confirmation(self):
@@ -170,13 +181,20 @@ class Bot(Case):
         with patch.object(config,'STT_ENABLED',True),patch('app.ai.transcribe',return_value='Добавь задачу купить хлеб'):r=self.run_update(voice={'file_id':'x','duration':5})
         with scope('tg:101'):self.assertEqual(store.list_events()[1],0)
         cb=r['reply_markup']['inline_keyboard'][0][0]['callback_data']
-        with patch('app.ai.plan',side_effect=TimeoutError):self.run_update(data=cb)
+        with patch('app.ai.plan',side_effect=TimeoutError):r=self.run_update(data=cb)
+        with scope('tg:101'):
+            self.assertEqual(store.list_events()[1],0)
+            self.assertEqual(service.dialog_preview('telegram-conversation')['title'],'Купить хлеб')
+        cb=r['reply_markup']['inline_keyboard'][0][0]['callback_data'];self.assertTrue(cb.startswith('yes:'))
+        self.run_update(data=cb)
         with scope('tg:101'):self.assertEqual(store.list_events()[1],1)
     def test_voice_without_key(self):self.assertIn('AI-ключ',self.run_update(voice={'file_id':'x','duration':5})['text'])
     def test_voice_too_long(self):
         config.API_KEY='test';self.assertIn('60 секунд',self.run_update(voice={'file_id':'x','duration':61})['text'])
     def test_export(self):
-        self.run_update(text='Добавь задачу купить хлеб');r=self.run_update(text='/export');self.assertIn('хлеб',r['document']);telegram_bot.deliver(self.client,r);self.assertEqual(len(self.client.docs),1)
+        self.run_update(text='Добавь задачу купить хлеб')
+        with scope('tg:101'):self.assertEqual(store.list_events()[1],0)
+        self.run_update(text='да');r=self.run_update(text='/export');self.assertIn('хлеб',r['document']);telegram_bot.deliver(self.client,r);self.assertEqual(len(self.client.docs),1)
     def test_timezone_sync(self):
         self.run_update(text='/timezone UTC')
         with scope('tg:101'):self.assertEqual(store.account()['timezone'],'UTC')
@@ -189,6 +207,7 @@ class Bot(Case):
 
 class Reminders(Case):
     def setUp(self):
+        clock=historical();clock.start();self.addCleanup(clock.stop)
         super().setUp();self.client=FakeTelegram();self.now=datetime(2026,10,15,12,0,tzinfo=timezone.utc)
         with scope('tg:101'):
             store.account({'chat_id':101});self.e=self.create('Позвонить Ивану',kind='reminder',date='2026-10-15',time='15:00')

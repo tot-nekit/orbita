@@ -1,13 +1,16 @@
 {
   "name": "orbita-assistant-ui-tests",
-  "version": "3.1.0",
+  "version": "3.3.2",
   "private": true,
   "scripts": {
     "test:e2e": "node tests/e2e.mjs",
     "test:mini": "node tests/e2e-mini.mjs",
     "test:redesign": "node tests/e2e-redesign.mjs",
     "test:auth": "node tests/e2e-auth.mjs",
-    "test:ui": "node tests/e2e.mjs && node tests/e2e-mini.mjs && node tests/e2e-redesign.mjs && node tests/e2e-auth.mjs"
+    "test:telegram": "node tests/e2e-telegram.mjs",
+    "test:focus": "node tests/e2e-focus.mjs",
+    "test:notes": "node tests/e2e-notes.mjs",
+    "test:ui": "node tests/e2e.mjs && node tests/e2e-mini.mjs && node tests/e2e-redesign.mjs && node tests/e2e-auth.mjs && node tests/e2e-telegram.mjs && node tests/e2e-focus.mjs && node tests/e2e-notes.mjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"

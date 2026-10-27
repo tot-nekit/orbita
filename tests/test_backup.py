@@ -179,3 +179,66 @@ class BackupScheduleTests(unittest.TestCase):
                 self.assertEqual(run.backup_settings(), (21600, 28))
         with patch.dict(os.environ, BACKUP_INTERVAL_HOURS="0.5", BACKUP_KEEP="3"):
             self.assertEqual(run.backup_settings(), (1800, 3))
+
+    def test_restart_waits_for_schedule_instead_of_pushing_out_old_copies(self):
+        import run
+        stop = threading.Event()
+        waits = []
+        def wait(seconds):
+            waits.append(seconds)
+            stop.set()
+        with patch.object(run.threading, "Event", return_value=stop), patch.object(stop, "wait", side_effect=wait), \
+                patch.object(backup, "newest_backup_age", return_value=600), \
+                patch.object(backup, "create_backup") as create:
+            self.assertEqual(run.backup_worker(), 0)
+        create.assert_not_called()
+        self.assertEqual(waits, [21600 - 600])
+
+
+class OffsiteBackupTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        for item in (patch.object(backup.config, "DB_PATH", str(self.root / "db.sqlite3")),
+                     patch.object(backup.database, "encryption_enabled", return_value=True),
+                     patch.dict(os.environ, {"TELEGRAM_BACKUP_CHAT_ID": "101", "TELEGRAM_BOT_TOKEN": "test:token"})):
+            item.start()
+            self.addCleanup(item.stop)
+        backup.backup_directory().mkdir()
+        self.file = backup.backup_directory() / "orbita-auto-20261027T000000000000Z-0123456789abcdef.sqlite3"
+        self.file.write_bytes(b"encrypted bytes")
+
+    class Client:
+        def __init__(self, fail=False):
+            self.sent, self.fail = [], fail
+        def document(self, chat, data, **kw):
+            if self.fail:
+                raise RuntimeError("private diagnostic with token")
+            self.sent.append((chat, data, kw["filename"]))
+
+    def test_sends_once_per_day_to_owner_chat(self):
+        client = self.Client()
+        self.assertTrue(backup.send_offsite(self.file, client, now=1_000_000))
+        self.assertFalse(backup.send_offsite(self.file, client, now=1_000_000 + 3600))
+        self.assertTrue(backup.send_offsite(self.file, client, now=1_000_000 + 24 * 3600))
+        self.assertEqual(client.sent[0], (101, b"encrypted bytes", self.file.name))
+        self.assertEqual(len(client.sent), 2)
+
+    def test_failure_is_quiet_and_retried_later(self):
+        import io
+        from contextlib import redirect_stdout
+        with redirect_stdout(io.StringIO()) as output:
+            self.assertFalse(backup.send_offsite(self.file, self.Client(fail=True), now=1_000_000))
+        self.assertNotIn("private diagnostic", output.getvalue())
+        self.assertTrue(backup.send_offsite(self.file, self.Client(), now=1_000_100))
+
+    def test_disabled_without_chat_encryption_or_valid_id(self):
+        client = self.Client()
+        with patch.dict(os.environ, {"TELEGRAM_BACKUP_CHAT_ID": ""}):
+            self.assertFalse(backup.send_offsite(self.file, client))
+        with patch.dict(os.environ, {"TELEGRAM_BACKUP_CHAT_ID": "-1; rm"}):
+            self.assertFalse(backup.send_offsite(self.file, client))
+        with patch.object(backup.database, "encryption_enabled", return_value=False):
+            self.assertFalse(backup.send_offsite(self.file, client))
+        self.assertEqual(client.sent, [])
