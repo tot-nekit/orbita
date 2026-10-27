@@ -16,11 +16,9 @@ def main():
                 'max_connections':1, 'allowed_updates':['message','callback_query'], 'drop_pending_updates':False})
     info = client.call('getWebhookInfo')
     if info.get('url') != base+'/api/telegram/webhook':raise RuntimeError('Telegram не подтвердил адрес webhook.')
-    client.call('setMyCommands', {'commands':[{'command':'start','description':'Начать и открыть планировщик'},
-                {'command':'today','description':'Планы на сегодня'},{'command':'new','description':'Новая запись'},
-                {'command':'link','description':'Связать с веб-сайтом'},{'command':'help','description':'Помощь'}]})
-    client.call('setChatMenuButton', {'menu_button':{'type':'web_app','text':'Орбита','web_app':{'url':base+'/mini'}}})
-    print('Webhook and Mini App configured; credentials omitted.', flush=True)
+    from scripts.configure_telegram import configure
+    configure(client)
+    print('Webhook, bot profile, commands and Mini App configured; credentials omitted.', flush=True)
 
 
 if __name__ == '__main__':

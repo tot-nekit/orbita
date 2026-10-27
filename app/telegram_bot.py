@@ -34,6 +34,35 @@ class Telegram:
             code=exc.code;exc.close()
             raise BotError('Telegram API вернул HTTP '+str(code)+'.') from None
         except Exception:raise BotError('Telegram API временно недоступен. Проверь сеть и токен.') from None
+    def upload(self, method, fields, file_field, data, filename, mime='application/octet-stream'):
+        """Send a multipart request for Bot API methods that accept InputFile."""
+        if not re.fullmatch(r'[A-Za-z0-9._-]{1,100}', filename):
+            raise BotError('Некорректное имя файла.')
+        boundary = secrets.token_hex(16)
+        parts = []
+        for name, value in fields.items():
+            parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n').encode())
+        parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name=\"{file_field}\"; filename=\"{filename}\"\r\nContent-Type: {mime}\r\n\r\n').encode())
+        body = b''.join(parts) + data + f'\r\n--{boundary}--\r\n'.encode()
+        req = urllib.request.Request(f'https://api.telegram.org/bot{self.token}/{method}', data=body,
+                                     headers={'Content-Type': 'multipart/form-data; boundary=' + boundary})
+        try:
+            with self.open(req, timeout=45) as response:
+                result = json.load(response)
+            if not result.get('ok'):
+                raise BotError('Telegram отклонил загрузку файла.')
+            return result.get('result')
+        except BotError:
+            raise
+        except Exception:
+            raise BotError('Не удалось загрузить файл в Telegram.') from None
+
+    def set_profile_photo(self, path):
+        photo = open(path, 'rb').read()
+        return self.upload('setMyProfilePhoto',
+                           {'photo': json.dumps({'type': 'static', 'photo': 'attach://profile_photo'})},
+                           'profile_photo', photo, 'orbita-bot.jpg', 'image/jpeg')
+
     def document(self,chat_id,data,filename='orbita-events.csv',mime='text/csv',caption=None):
         if not re.fullmatch(r'[A-Za-z0-9._-]{1,100}',filename) or not re.fullmatch(r'[a-z]+/[a-z0-9.+-]+',mime):raise BotError('Некорректный файл.')
         boundary=secrets.token_hex(16)
@@ -257,8 +286,10 @@ def run():
     logging.basicConfig(level=logging.INFO);store.init();client=Telegram()
     webhook=connect(client)
     if webhook.get('url'):raise SystemExit('У бота настроен webhook. Удали его через deleteWebhook перед long polling; автоматически настройки не меняем.')
-    try:client.call('setMyCommands',{'commands':[{'command':'start','description':'Начать и открыть планировщик'},{'command':'today','description':'Планы на сегодня'},{'command':'new','description':'Новая запись'},{'command':'note','description':'Быстрая заметка'},{'command':'notes','description':'Последние заметки'},{'command':'link','description':'Связать с веб-сайтом'},{'command':'account','description':'Статус привязки'},{'command':'help','description':'Помощь'}]})
-    except BotError:log.warning('Telegram commands were not updated; polling continues')
+    try:
+        from scripts.configure_telegram import COMMANDS
+        client.call('setMyCommands', {'commands': COMMANDS})
+    except (BotError, ImportError):log.warning('Telegram commands were not updated; polling continues')
     try:
         if mini_url():client.call('setChatMenuButton',{'menu_button':{'type':'web_app','text':'Орбита','web_app':{'url':mini_url()}}})
     except BotError:log.warning('Telegram menu button was not updated; polling continues')
