@@ -5537,3 +5537,59 @@ dialog {
   .note-dialog { width:100%; }
   .note-head { padding-top:8px; }
 }
+
+/* Phones: the chat owns the screen; focus of the day is one slim pinned line. */
+@media (max-width: 760px) {
+  body.phone .chat-panel .panel-head {
+    gap: 8px;
+    padding: 4px 8px 4px 12px;
+  }
+  body.phone .chat-panel .panel-head .assistant-avatar,
+  body.phone .chat-panel .panel-head #mode-label {
+    display: none;
+  }
+  body.phone .chat-panel .panel-head strong {
+    font-size: 14px;
+  }
+  body.phone .chat-panel .panel-head .icon-button {
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+  }
+  body.phone .chat-pins {
+    gap: 0;
+    padding: 5px 10px 6px;
+  }
+  body.phone .chat-pins .stats {
+    display: none !important;
+  }
+  body.phone .chat-pins .daily-focus,
+  body.phone .chat-pins .daily-focus.is-empty {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 8px;
+    padding-left: 8px;
+  }
+  body.phone .chat-pins .focus-eyebrow {
+    font-size: 9px;
+    line-height: 1.2;
+  }
+  body.phone .chat-pins .daily-focus h2 {
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  body.phone .chat-pins .daily-focus:not(.is-running) p {
+    display: none;
+  }
+  body.phone .chat-pins .daily-focus.is-empty .focus-actions {
+    margin-top: 0;
+  }
+  body.phone .chat-pins .focus-actions {
+    max-width: 46vw;
+  }
+  body.phone .chat-pins .focus-actions > button {
+    min-height: 28px;
+    min-width: 28px;
+    padding: 2px 9px;
+    font-size: 12px;
+  }
+}
